@@ -1,0 +1,17 @@
+{
+    "manifest_version": 3,
+    "name": "크래시리틱 해독기",
+    "version": "1.0",
+    "description": "크래시리틱 해독기",
+    "action": {
+      "default_popup": "popup.html"
+    },
+    "permissions": [
+      "storage",
+      "scripting",
+      "activeTab"
+    ],
+    "host_permissions": [
+      "<all_urls>"
+    ]
+  }
