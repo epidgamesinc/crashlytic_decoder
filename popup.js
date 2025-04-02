@@ -1,17 +1,21 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const dropZone = document.getElementById('drop-zone');
     const fileUpload = document.getElementById('file-upload');
-    const fileName = document.getElementById('file-name');
+    const fileNameElement = document.getElementById('file-name');
     const fileContent = document.getElementById('file-content');
     const fileInfo = document.getElementById('file-info');
+    const fileContainer = document.getElementById('file-input-container');
     const clearBtn = document.getElementById('clear-btn');
-    let mappingData = null;
-    let os = null;
-    let loadSuccess = false;
-  
+    // 1. 메모리에서 데이터 로드
+    let { mappingData, loadSuccess, fileName, isDebugMode } = await loadFromMemory();
+    console.log("DOM LOADED");
+    console.log(mappingData, loadSuccess, fileName, isDebugMode);
     // 저장된 파일 내용 불러오기
-    loadSavedFile();
-  
+
+    // if(loadSuccess == false){
+    //     loadSavedFile();
+    // }
+
     // 파일 업로드 버튼 이벤트
     fileUpload.addEventListener('change', handleFileSelect);
   
@@ -20,22 +24,53 @@ document.addEventListener('DOMContentLoaded', () => {
   
     // 내용 지우기 버튼
     clearBtn.addEventListener('click', clearFile);
-  
-    // DOM 로드 시 크래시리틱 스택 감지
-    checkForCrashlyticsStack();
-    checkPage(fileName.textContent); // 파일명 전달
-  
-    function loadSavedFile() {
-      chrome.storage.local.get(['savedFileName', 'savedFileContent'], (result) => {
-        if (result.savedFileName && result.savedFileContent) {
-          displayFile(result.savedFileName, result.savedFileContent);
-          processMappingData(result.savedFileContent);
-          checkPage(fileName.textContent); // 파일명 전달
-          checkForCrashlyticsStack();
-        }
-      });
+
+    await init();
+
+
+
+
+
+    async function saveToMemory(cb) {
+        return new Promise((resolve) => {
+            chrome.runtime.sendMessage({
+                action: 'SET_DATA',
+                ...{
+                     mappingData: mappingData,
+                     loadSuccess: loadSuccess,
+                     fileName: fileNameElement.textContent,
+                    isDebugMode : isDebugMode
+                 }
+            }, (response) => {
+                resolve(response?.success ?? false);
+                if(cb != null) cb();
+            });
+        });
     }
-  
+
+// 데이터 불러오기
+    async function loadFromMemory(cb) {
+        return new Promise((resolve) => {
+            chrome.runtime.sendMessage({
+                action: 'GET_DATA'
+            }, (response) => {
+                resolve(response || {});
+                if(cb != null) cb();
+            });
+        });
+    }
+
+    async function init(){
+        showLoading(); // 로딩 시작
+
+        checkForCrashlyticsStack();
+        loadSuccess = await checkPage(fileNameElement?.textContent == null || fileNameElement?.textContent != '' ? fileNameElement?.textContent : fileName); // 파일명 전달
+        console.log("await loadsuccess " + loadSuccess);
+        displayFile(fileNameElement?.textContent == null || fileNameElement?.textContent != ''  ? fileNameElement?.textContent : fileName, mappingData != null ? JSON.stringify(mappingData) : '');
+        await saveToMemory();
+
+        hideLoading();
+    }
     function setupDragAndDrop() {
       ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, preventDefaults, false);
@@ -88,17 +123,23 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   
-    function readFile(file) {
+    async function readFile(file) {
+
       const reader = new FileReader();
   
-      reader.onload = (e) => {
-        const content = e.target.result;
-        saveAndDisplayFile(file.name, content);
-        processMappingData(content);
-        checkPage(file.name); // 파일명 전달
-        checkForCrashlyticsStack();
-        console.log("로드완료")
+      reader.onload = async (e) => {
+          showLoading();
 
+          const content = e.target.result;
+          processMappingData(content);
+          loadSuccess = await checkPage(file.name); // 파일명 전달
+          displayFile(file.name, content);
+          checkForCrashlyticsStack();
+          console.log("로드완료")
+
+          await saveToMemory();
+
+          hideLoading()
       };
   
       reader.onerror = () => {
@@ -107,38 +148,46 @@ document.addEventListener('DOMContentLoaded', () => {
   
       reader.readAsText(file);
     }
-  
-    function saveAndDisplayFile(name, content) {
-      chrome.storage.local.set({
-        savedFileName: name,
-        savedFileContent: content
-      }, () => {
-        displayFile(name, content);
-      });
+    // 로딩 표시 함수
+    function showLoading() {
+        const overlay = document.getElementById('loading-overlay');
+        overlay.style.display = 'flex';
     }
-  
+
+// 로딩 숨기기 함수
+    function hideLoading() {
+        const overlay = document.getElementById('loading-overlay');
+        overlay.style.display = 'none';
+    }
+
     function displayFile(name, content) {
-      fileName.textContent = `파일 이름: ${name}`;
+      fileNameElement.textContent = `파일 이름: ${name}`;
       fileContent.textContent = content;
-      fileInfo.style.display = 'block';
+      fileInfo.style.display = loadSuccess ? 'block' : 'none';
+        fileContainer.style.display = loadSuccess ? 'none' : 'block';
+
     }
   
     function displayError(message) {
       fileContent.textContent = message;
       fileInfo.style.display = 'block';
-      chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
+      // chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
     }
   
     function clearFile() {
-      fileName.textContent = '';
+      fileNameElement.textContent = '';
       fileContent.textContent = '';
+        fileContainer.style.display = 'block';
       fileInfo.style.display = 'none';
       fileUpload.value = '';
+      fileName = '';
+      loadSuccess = false;
       mappingData = null;
-      chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
-      checkPage(fileName.textContent); // 파일명 전달
+      saveToMemory();
+      // chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
+      checkPage(fileNameElement?.textContent == null || fileNameElement?.textContent != '' ? fileNameElement?.textContent : fileName); // 파일명 전달
       checkForCrashlyticsStack();
-
+      displayFile('', '')
     }
   
     function processMappingData(content) {
@@ -149,8 +198,9 @@ document.addEventListener('DOMContentLoaded', () => {
         mappingData = null;
       }
     }
-  
-    function checkPage(fileName = '') {
+
+    async function checkPage(fileName = '') {
+        return new Promise((resolve) => {
         chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
           chrome.scripting.executeScript({
             target: {tabId: tabs[0].id},
@@ -251,16 +301,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 store: fileData.store,
                 isValid: isValid
               });
+
+                return isValid; // 이 값을 resolve로 전달
             },
             args: [fileName.replace('파일 이름: ', '')]
+          }, (results) => {
+              // executeScript의 콜백에서 결과 처리
+              const isValid = results?.[0]?.result ?? false;
+              resolve(isValid);
           });
         });
-      }
+        });
+    }
     function checkForCrashlyticsStack() {
         chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
           chrome.scripting.executeScript({
             target: {tabId: tabs[0].id},
             func: (mappingData) => {
+                if(mappingData == null){
+                    console.log("맵핑 데이터 없어서 리턴");
+                    return;
+                }
+
+
+                    // 매핑 데이터 파싱
+                let parsedMapping = null;
+                try {
+                    parsedMapping = JSON.parse(mappingData);
+                    if(parsedMapping?.MemberTyp_Mapping?.Method?.Mapping == null){
+                        console.log("맵핑 데이터 없어서 리턴2");
+                        return;
+                    }
+                } catch (e) {
+                    console.error('매핑 데이터 파싱 실패:', e);
+                    return;
+                }
+
+
                 const osIcon = document.querySelector('.session-os .platform-icon');
                 const isiOS = osIcon?.innerHTML.includes('plat_ios');
 
@@ -293,14 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     };
                   }
 
-              // 매핑 데이터 파싱
-              let parsedMapping = null;
-              try {
-                parsedMapping = JSON.parse(mappingData);
-              } catch (e) {
-                console.error('매핑 데이터 파싱 실패:', e);
-              }
-      
+
               // DOM 조작
               document.querySelectorAll('c9s-stack-frame').forEach(frame => {
                 const contextDiv = frame.querySelector('.context-cell > div');
@@ -362,9 +432,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // 내용 업데이트 (덮어쓰기)
                 translationSpan.textContent = `Translated => ${translatedText}`;
-                if(loadSuccess == false){
-                    translationSpan.textContent = '로드 실패';
-                }
+                // if(loadSuccess == false){
+                //     translationSpan.textContent = '로드 실패';
+                // }
               });
             },
             args: [mappingData ? JSON.stringify(mappingData) : '{}']
