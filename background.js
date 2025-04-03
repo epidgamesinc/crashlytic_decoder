@@ -1,7 +1,7 @@
 // 메모리 저장소
 const memoryStore = {
     mappingData: null,
-    loadSuccess: false,
+    fileLoadSuccess: false,
     fileName: '',
     isDebugMode : false,
 };
@@ -11,7 +11,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     switch (request.action) {
         case 'SET_DATA':
             memoryStore.mappingData = request.mappingData;
-            memoryStore.loadSuccess = request.loadSuccess;
+            memoryStore.fileLoadSuccess = request.fileLoadSuccess;
             memoryStore.fileName = request.fileName;
             memoryStore.isDebugMode = request.isDebugMode;
             sendResponse({ success: true });
@@ -20,7 +20,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         case 'GET_DATA':
             sendResponse({
                 mappingData: memoryStore.mappingData,
-                loadSuccess: memoryStore.loadSuccess,
+                fileLoadSuccess: memoryStore.fileLoadSuccess,
                 fileName: memoryStore.fileName,
                 isDebugMode: memoryStore.isDebugMode,
             });

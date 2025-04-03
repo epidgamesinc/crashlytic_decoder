@@ -6,17 +6,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const fileInfo = document.getElementById('file-info');
     const fileContainer = document.getElementById('file-input-container');
     const clearBtn = document.getElementById('clear-btn');
-    // 1. 메모리에서 데이터 로드
-    let { mappingData, loadSuccess, fileName, isDebugMode } = await loadFromMemory();
+
+    let { mappingData, fileLoadSuccess, fileName, isDebugMode } = await loadFromMemory();
+    let pageLoadSuccess = false;
+    fileLoadSuccess = mappingData != null;
+
     console.log("DOM LOADED");
-    console.log(mappingData, loadSuccess, fileName, isDebugMode);
-    // 저장된 파일 내용 불러오기
+    console.log(mappingData, fileLoadSuccess,pageLoadSuccess, fileName, isDebugMode);
 
-    // if(loadSuccess == false){
-    //     loadSavedFile();
-    // }
-
-    // 파일 업로드 버튼 이벤트
     fileUpload.addEventListener('change', handleFileSelect);
   
     // 드래그 앤 드롭 이벤트
@@ -28,16 +25,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     await init();
 
 
-
-
-
     async function saveToMemory(cb) {
         return new Promise((resolve) => {
             chrome.runtime.sendMessage({
                 action: 'SET_DATA',
                 ...{
                      mappingData: mappingData,
-                     loadSuccess: loadSuccess,
+                     loadSuccess: pageLoadSuccess,
                      fileName: fileNameElement.textContent,
                     isDebugMode : isDebugMode
                  }
@@ -63,13 +57,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function init(){
         showLoading(); // 로딩 시작
 
+        pageLoadSuccess = await checkPage(fileNameElement?.textContent == null || fileNameElement?.textContent != '' ? fileNameElement?.textContent : fileName); // 파일명 전달
         checkForCrashlyticsStack();
-        loadSuccess = await checkPage(fileNameElement?.textContent == null || fileNameElement?.textContent != '' ? fileNameElement?.textContent : fileName); // 파일명 전달
-        console.log("await loadsuccess " + loadSuccess);
+
+        console.log("await loadsuccess " + pageLoadSuccess);
         displayFile(fileNameElement?.textContent == null || fileNameElement?.textContent != ''  ? fileNameElement?.textContent : fileName, mappingData != null ? JSON.stringify(mappingData) : '');
         await saveToMemory();
 
         hideLoading();
+
+        showHUD(); // HUD 표시 추가
+    }
+    function showHUD() {
+        const hudContainer = document.createElement('div');
+        hudContainer.id = 'hud-container';
+        hudContainer.style.padding = '10px';
+        hudContainer.style.marginBottom = '15px';
+        hudContainer.style.borderRadius = '4px';
+        hudContainer.style.textAlign = 'center';
+        hudContainer.style.fontWeight = 'bold';
+
+        if (pageLoadSuccess && fileLoadSuccess) {
+            hudContainer.textContent = '? 파일이 성공적으로 로드되었습니다';
+            hudContainer.style.backgroundColor = '#e6f7e6';
+            hudContainer.style.color = '#2e7d32';
+        } else {
+            hudContainer.textContent = '?? 올바른 매핑 파일을 로드해주세요';
+            hudContainer.style.backgroundColor = '#ffebee';
+            hudContainer.style.color = '#c62828';
+        }
+
+        // 기존 HUD 제거
+        const existingHud = document.getElementById('hud-container');
+        if (existingHud) {
+            existingHud.remove();
+        }
+
+        // 컨테이너 최상단에 추가
+        const container = document.querySelector('.container');
+        container.insertBefore(hudContainer, container.firstChild);
     }
     function setupDragAndDrop() {
       ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -132,7 +158,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
           const content = e.target.result;
           processMappingData(content);
-          loadSuccess = await checkPage(file.name); // 파일명 전달
+          pageLoadSuccess = await checkPage(file.name); // 파일명 전달
           displayFile(file.name, content);
           checkForCrashlyticsStack();
           console.log("로드완료")
@@ -140,6 +166,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           await saveToMemory();
 
           hideLoading()
+          showHUD(); // HUD 표시 추가
+
       };
   
       reader.onerror = () => {
@@ -163,8 +191,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     function displayFile(name, content) {
       fileNameElement.textContent = `파일 이름: ${name}`;
       fileContent.textContent = content;
-      fileInfo.style.display = loadSuccess ? 'block' : 'none';
-        fileContainer.style.display = loadSuccess ? 'none' : 'block';
+      fileInfo.style.display = fileLoadSuccess ? 'block' : 'none';
+        fileContainer.style.display = fileLoadSuccess ? 'none' : 'block';
 
     }
   
@@ -174,25 +202,28 @@ document.addEventListener('DOMContentLoaded', async () => {
       // chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
     }
   
-    function clearFile() {
+    async function clearFile() {
       fileNameElement.textContent = '';
       fileContent.textContent = '';
         fileContainer.style.display = 'block';
       fileInfo.style.display = 'none';
       fileUpload.value = '';
       fileName = '';
-      loadSuccess = false;
+      fileLoadSuccess = false;
       mappingData = null;
       saveToMemory();
       // chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
-      checkPage(fileNameElement?.textContent == null || fileNameElement?.textContent != '' ? fileNameElement?.textContent : fileName); // 파일명 전달
+      await checkPage(fileNameElement?.textContent == null || fileNameElement?.textContent != '' ? fileNameElement?.textContent : fileName); // 파일명 전달
       checkForCrashlyticsStack();
       displayFile('', '')
+        showHUD(); // HUD 표시 추가
+
     }
   
     function processMappingData(content) {
       try {
         mappingData = JSON.parse(content);
+        fileLoadSuccess = true;
       } catch (e) {
         console.error('매핑 데이터 파싱 실패:', e);
         mappingData = null;
@@ -250,8 +281,9 @@ document.addEventListener('DOMContentLoaded', async () => {
               // 5. 검증 로직
               const isVersionMatch = version && fileData.version && version === fileData.version;
               const isOSMatch = os !== 'unknown' && fileData.store && os === fileData.store;
-              const isValid = fileName && isVersionMatch && isOSMatch;
-      
+              const isValid = fileName != null && isVersionMatch == true && isOSMatch == true;
+                console.log("isValid => "+isValid);
+
               // 6. 상태 바 생성
               const statusBar = document.createElement('div');
               statusBar.className = 'custom-status-bar';
@@ -281,8 +313,9 @@ document.addEventListener('DOMContentLoaded', async () => {
               statusIndicator.style.fontWeight = 'bold';
               statusIndicator.textContent = isValid ? '로드 성공' : '로드 실패';
               statusIndicator.style.color = isValid ? '#4285f4' : '#ea4335';
-      
-              loadSuccess = isValid;
+
+                console.log("loadSuccess 할당");
+              pageLoadSuccess = isValid;
 
               fileInfo.appendChild(statusIndicator);
       
@@ -308,12 +341,16 @@ document.addEventListener('DOMContentLoaded', async () => {
           }, (results) => {
               // executeScript의 콜백에서 결과 처리
               const isValid = results?.[0]?.result ?? false;
+              console.log("Resolve "+isValid);
               resolve(isValid);
           });
         });
         });
     }
     function checkForCrashlyticsStack() {
+        if(fileLoadSuccess == false || pageLoadSuccess == false){
+            return;
+        }
         chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
           chrome.scripting.executeScript({
             target: {tabId: tabs[0].id},
@@ -441,23 +478,5 @@ document.addEventListener('DOMContentLoaded', async () => {
           });
         });
       }
-  
-    function generateTranslatedStack(stackInfo) {
-      if (!mappingData) return '';
-  
-      return stackInfo.map(item => {
-        const { original, className, methodName } = item;
-        let translated = 'Not found';
-        
-        // 매핑 데이터에서 해당 메서드명 검색
-        for (const [key, value] of Object.entries(mappingData)) {
-          if (value === methodName && key.includes(className)) {
-            translated = key;
-            break;
-          }
-        }
-        
-        return `${original} -- Translated => "${translated}"`;
-      }).join('<br>');
-    }
+
   });
