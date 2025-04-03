@@ -437,11 +437,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         console.log("sym " +symbolDiv?.textContent);
                         console.log("fileLine " +fileLine?.textContent);
-                        let methodName = fileLine?.textContent.trim();
-                        let className = symbolDiv?.textContent.trim();
+                        let className = fileLine?.textContent.trim();
+                        let methodName = symbolDiv?.textContent.trim();
+
+                        if(className.includes('+')){
+                            methodName += '.'+className.split('+')[1].trim();
+                            className = className.split('+')[0].trim();
+
+                        }
 
                         return {
-                            methodName: methodName.includes('+') ? methodName.split('+')[1].trim() : methodName,
+                            methodName: methodName,
                             className: className
                         };
                     }
@@ -468,8 +474,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         let translatedText = '';
                         if (parsedMapping) {
                             methodName.split('.').forEach(methodName => {
-                                console.log("TARGET : " + methodName + " / " + className);
                                 var exist = false;
+                                console.log("TARGET : M" + methodName + " / " + className);
 
                                 for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Method.Mapping)) {
                                     if (value === methodName && key.includes(className)) {
