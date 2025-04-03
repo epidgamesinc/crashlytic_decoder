@@ -383,26 +383,52 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const isiOS = osIcon?.innerHTML.includes('plat_ios');
 
                     function parseAndroidStack(frame) {
-                        //console.log("do parse and")
                         const contextDiv = frame.querySelector('.context-cell > div');
                         if (!contextDiv) return null;
 
                         const text = contextDiv.textContent.trim();
+                        const lastParenIndex = text.lastIndexOf('(');
 
-                        const methodMatch = text.match(/\+([^.]*)\.|\.([^(.]*)\(/);
-                        const classMatch = text.match(/\(([^+)]+)/);
+                        // 1. className 추출: 마지막 ( ~ ) 사이 내용에서 + 앞부분
+                        const className = extractClassName(text);
 
-                        let methodName = null;
-                        if (methodMatch) {
-                            // +가 있는 경우: methodMatch[1] 캡처
-                            // +가 없는 경우: methodMatch[2] 캡처
-                            methodName = methodMatch[1] || methodMatch[2];
+                        // 2. methodName 추출
+                        let methodName = '';
+                        if (text.includes('+')) {
+                            // +가 있는 경우: + ~ ( 사이
+                            const plusIndex = text.indexOf('+');
+                            methodName = text.slice(plusIndex + 1, lastParenIndex).trim();
+                        } else {
+                            // +가 없는 경우: 마지막 . ~ ( 사이
+                            const lastDotIndex = text.lastIndexOf('.', lastParenIndex);
+                            methodName = text.slice(lastDotIndex + 1, lastParenIndex).trim();
                         }
 
-                        return {
-                            methodName: methodName?.trim() ?? '',
-                            className: classMatch ? classMatch[1].trim() : null
-                        };
+                        return { methodName, className };
+                    }
+
+// className 추출 헬퍼 함수
+                    function extractClassName(text) {
+                        const betweenParen = text.slice(
+                            text.lastIndexOf('(') + 1,
+                            text.lastIndexOf(')')
+                        ).trim();
+                        return betweenParen.split('+')[0]; // +가 없으면 전체 반환
+                    }
+// methodName 추출 함수
+                    function extractMethodName(text) {
+                        const plusIndex = text.indexOf('+');
+                        const lastDotIndex = text.lastIndexOf('.');
+                        const lastParenIndex = text.lastIndexOf('(');
+
+                        if (plusIndex !== -1) {
+                            // '+'가 있는 경우: '+'부터 '('까지
+                            return text.substring(plusIndex + 1, lastParenIndex).trim();
+                        } else if (lastDotIndex !== -1) {
+                            // '+'는 없고 '.'이 있는 경우: 마지막 '.'부터 '('까지
+                            return text.substring(lastDotIndex + 1, lastParenIndex).trim();
+                        }
+                        return ''; // 둘 다 없는 경우
                     }
 
                     function parseiOSStack(frame) {
@@ -434,195 +460,98 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (!methodName || !className) return;
 
                         // 변환된 텍스트 찾기
-                        let translatedText = 'Not found';
+                        let translatedText = '';
                         if (parsedMapping) {
-                            var exist = false;
+                            methodName.split('.').forEach(methodName => {
+                                console.log("TARGET : " + methodName + " / " + className);
+                                var exist = false;
 
-                            for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Method.Mapping)) {
-                                if (value === methodName && key.includes(className)) {
-                                    translatedText = key;
-                                    exist = true;
-                                    break;
-                                }
-                            }
-
-                            if (exist == false) {
-                                for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Event.Mapping)) {
+                                for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Method.Mapping)) {
                                     if (value === methodName && key.includes(className)) {
-                                        translatedText = key;
+                                        translatedText += (key + '\n');
                                         exist = true;
                                         break;
                                     }
                                 }
 
-                            }
+                                if (exist == false) {
+                                    for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Event.Mapping)) {
+                                        if (value === methodName && key.includes(className)) {
+                                            translatedText += key + '\n';
+                                            exist = true;
+                                            break;
+                                        }
+                                    }
 
-                            if (exist == false) {
+                                }
 
-                                for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Type.Mapping)) {
-                                    if (value === methodName && key.includes(className)) {
-                                        translatedText = key;
-                                        exist = true;
-                                        break;
+                                if (exist == false) {
+
+                                    for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Type.Mapping)) {
+                                        if (value === methodName && key.includes(className)) {
+                                            translatedText += key + '\n';
+                                            exist = true;
+                                            break;
+                                        }
                                     }
                                 }
-                            }
 
-                            if (exist == false) {
-                                for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Field.Mapping)) {
-                                    if (value === methodName && key.includes(className)) {
-                                        translatedText = key;
-                                        exist = true;
-                                        break;
+                                if (exist == false) {
+                                    for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Field.Mapping)) {
+                                        if (value === methodName && key.includes(className)) {
+                                            translatedText += key + '\n';
+                                            exist = true;
+                                            break;
+                                        }
                                     }
                                 }
-                            }
 
-                            if (exist == false) {
-                                for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Property.Mapping)) {
-                                    if (value === methodName && key.includes(className)) {
-                                        translatedText = key;
-                                        exist = true;
-                                        break;
+                                if (exist == false) {
+                                    for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Property.Mapping)) {
+                                        if (value === methodName && key.includes(className)) {
+                                            translatedText += key + '\n';
+                                            exist = true;
+                                            break;
+                                        }
                                     }
                                 }
-                            }
 
-                            if (exist == false) {
-                                translatedText = '';
 
+                            })
+
+
+                            if (translatedText == '') {
                                 for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Method.Mapping)) {
                                     if (value === methodName) {
                                         translatedText += (key + '\n');
-                                        exist = true;
                                     }
                                 }
-                            }
-
-                            if (exist == false) {
-                                translatedText = '';
 
                                 for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Event.Mapping)) {
                                     if (value === methodName) {
-                                        translatedText += (key + '\n');
-                                        exist = true;
+                                        translatedText += key + '\n';
                                     }
                                 }
-                            }
-
-                            if (exist == false) {
-                                translatedText = '';
 
                                 for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Type.Mapping)) {
                                     if (value === methodName) {
-                                        translatedText += (key + '\n');
-                                        exist = true;
+                                        translatedText += key + '\n';
                                     }
                                 }
-                            }
-
-                            if (exist == false) {
-                                translatedText = '';
-
                                 for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Field.Mapping)) {
                                     if (value === methodName) {
-                                        translatedText += (key + '\n');
-                                        exist = true;
+                                        translatedText += key + '\n';
                                     }
                                 }
-                            }
-
-                            if (exist == false) {
-                                translatedText = '';
 
                                 for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Property.Mapping)) {
                                     if (value === methodName) {
-                                        translatedText += (key + '\n');
-                                        exist = true;
+                                        translatedText += key + '\n';
                                     }
                                 }
-                            }
-
-                            if (exist == false) {
-                                if (className.includes('+')) {
-                                    var className2 = className.split('+')[1];
-                                    if(className2.includes('.')){
-                                        className2 = className2.split('.')[0];
-                                    }
-
-                                    //console.log("!!!!!!!!!! classname =>" + className2);
-
-                                    for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Method.Mapping)) {
-                                        if (value === className2) {
-                                            translatedText += (key + '\n');
-                                            exist = true;
-                                        }
-                                    }
+                                if (translatedText == '') {
+                                    translatedText = 'Not Found';
                                 }
-                            }
-
-                            if (exist == false) {
-                                if (className.includes('+')) {
-                                    var className2 = className.split('+')[1];
-                                    if(className2.includes('.')){
-                                        className2 = className2.split('.')[0];
-                                    }
-                                    for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Event.Mapping)) {
-                                        if (value === className2) {
-                                            translatedText += (key + '\n');
-                                            exist = true;
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (exist == false) {
-                                if (className.includes('+')) {
-                                    var className2 = className.split('+')[1];
-                                    if(className2.includes('.')){
-                                        className2 = className2.split('.')[0];
-                                    }
-                                    for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Type.Mapping)) {
-                                        if (value === className2) {
-                                            translatedText += (key + '\n');
-                                            exist = true;
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (exist == false) {
-                                if (className.includes('+')) {
-                                    var className2 = className.split('+')[1];
-                                    if(className2.includes('.')){
-                                        className2 = className2.split('.')[0];
-                                    }
-                                    for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Field.Mapping)) {
-                                        if (value === className2) {
-                                            translatedText += (key + '\n');
-                                            exist = true;
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (exist == false) {
-                                if (className.includes('+')) {
-                                    var className2 = className.split('+')[1];
-                                    if(className2.includes('.')){
-                                        className2 = className2.split('.')[0];
-                                    }
-                                    for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Property.Mapping)) {
-                                        if (value === className2) {
-                                            translatedText += (key + '\n');
-                                            exist = true;
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (exist == false) {
-                                translatedText = 'Not Found';
                             }
                         }
 
@@ -638,7 +567,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         // 내용 업데이트 (덮어쓰기)
                         translationSpan.textContent = `Translated => ${translatedText}`;
-
+                        if (translationSpan) {
+                            translationSpan.innerHTML = translationSpan.textContent.replaceAll(/</g, '&lt;').replaceAll(/>/g, '&gt;').replaceAll(/\n/g, '<br>');
+                        }
                         //console.log(parsedMapping);
                         // if(loadSuccess == false){
                         //     translationSpan.textContent = '로드 실패';
