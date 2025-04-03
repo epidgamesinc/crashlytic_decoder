@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   
     // 드래그 앤 드롭 이벤트
     setupDragAndDrop();
-  
+
     // 내용 지우기 버튼
     clearBtn.addEventListener('click', clearFile);
 
@@ -74,15 +74,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         hudContainer.style.padding = '10px';
         hudContainer.style.marginBottom = '15px';
         hudContainer.style.borderRadius = '4px';
-        hudContainer.style.textAlign = 'center';
+        hudContainer.style.textAlign = 'center'; 
         hudContainer.style.fontWeight = 'bold';
 
         if (pageLoadSuccess && fileLoadSuccess) {
-            hudContainer.textContent = '? 파일이 성공적으로 로드되었습니다';
+            hudContainer.textContent = '해독이 정상적으로 적용중입니다';
             hudContainer.style.backgroundColor = '#e6f7e6';
             hudContainer.style.color = '#2e7d32';
         } else {
-            hudContainer.textContent = '?? 올바른 매핑 파일을 로드해주세요';
+            hudContainer.textContent = '파일이 없거나 잘못된 파일(앱버전, os 불일치), 혹은 잘못된 페이지입니다.';
             hudContainer.style.backgroundColor = '#ffebee';
             hudContainer.style.color = '#c62828';
         }
@@ -101,46 +101,46 @@ document.addEventListener('DOMContentLoaded', async () => {
       ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, preventDefaults, false);
       });
-  
+
       ['dragenter', 'dragover'].forEach(eventName => {
         dropZone.addEventListener(eventName, highlight, false);
       });
-  
+
       ['dragleave', 'drop'].forEach(eventName => {
         dropZone.addEventListener(eventName, unhighlight, false);
       });
-  
+
       dropZone.addEventListener('drop', handleDrop, false);
     }
-  
+
     function preventDefaults(e) {
       e.preventDefault();
       e.stopPropagation();
     }
-  
+
     function highlight() {
       dropZone.classList.add('highlight');
     }
-  
+
     function unhighlight() {
       dropZone.classList.remove('highlight');
     }
-  
+
     function handleDrop(e) {
       const dt = e.dataTransfer;
       const files = dt.files;
       handleFiles(files);
     }
-  
+
     function handleFileSelect(e) {
       const files = e.target.files;
       handleFiles(files);
     }
-  
+
     function handleFiles(files) {
       if (files.length > 0) {
         const file = files[0];
-        
+
         if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
           readFile(file);
         } else {
@@ -148,11 +148,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }
     }
-  
+
     async function readFile(file) {
 
       const reader = new FileReader();
-  
+
       reader.onload = async (e) => {
           showLoading();
 
@@ -169,11 +169,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           showHUD(); // HUD 표시 추가
 
       };
-  
+
       reader.onerror = () => {
         displayError('파일을 읽는 중 오류가 발생했습니다.');
       };
-  
+
       reader.readAsText(file);
     }
     // 로딩 표시 함수
@@ -195,13 +195,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         fileContainer.style.display = fileLoadSuccess ? 'none' : 'block';
 
     }
-  
+
     function displayError(message) {
       fileContent.textContent = message;
       fileInfo.style.display = 'block';
       // chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
     }
-  
+
     async function clearFile() {
       fileNameElement.textContent = '';
       fileContent.textContent = '';
@@ -219,7 +219,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         showHUD(); // HUD 표시 추가
 
     }
-  
+
     function processMappingData(content) {
       try {
         mappingData = JSON.parse(content);
@@ -239,7 +239,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               // 1. 기존 상태 바 제거
               const existingStatusBar = document.querySelector('.custom-status-bar');
               if (existingStatusBar) existingStatusBar.remove();
-      
+
               // 2. 버전 정보 추출
               const versionElement = document.querySelector('.session-build-version .header-item-text');
               let version = '';
@@ -247,37 +247,37 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const versionMatch = versionElement.textContent.trim().match(/\d+/);
                 version = versionMatch ? versionMatch[0] : '';
               }
-      
+
               // 3. OS 정보 추출
               const osIcon = document.querySelector('.session-os .platform-icon');
               let os = 'unknown';
               if (osIcon) {
                 const osName = (osIcon?.innerHTML ?? "") + "";
-                os = osName.includes('plat_android') ? 'Android' : 
+                os = osName.includes('plat_android') ? 'Android' :
                      osName.includes('plat_ios') ? 'iOS' : 'unknown';
               }
-      
+
               // 4. 파일명 파싱
               const parseFileName = (fileName) => {
                 if (!fileName) return { store: '', version: '' };
-      
+
                 let store = fileName.includes('GooglePlayStore') ? 'Android' :
                            fileName.includes('AppleAppStore') ? 'iOS' : '';
-      
+
                 let fileVersion = '';
                 const versionMatch = fileName.match(/Ver (\d+\.\d+\.\d+)/);
                 if (versionMatch) {
                   const parts = versionMatch[1].split('.');
-                  fileVersion = parts.length === 3 ? 
+                  fileVersion = parts.length === 3 ?
                     `${parts[0]}${parts[1].padStart(2, '0')}${parts[2].padStart(2, '0')}` : '';
                 }
-      
+
                 return { store, version: fileVersion };
               };
-      
+
               console.log("파일명: "+fileName);
               const fileData = parseFileName(fileName);
-              
+
               // 5. 검증 로직
               const isVersionMatch = version && fileData.version && version === fileData.version;
               const isOSMatch = os !== 'unknown' && fileData.store && os === fileData.store;
@@ -296,17 +296,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 alignItems: 'center',
                 fontSize: '14px'
               });
-      
+
               // 7. 페이지 정보 표시
               const pageInfo = document.createElement('div');
               pageInfo.textContent = `App Version: ${version} | OS: ${os}`;
-              
+
               // 8. 파일 정보 표시
               const fileInfo = document.createElement('div');
-              fileInfo.textContent = fileName ? 
+              fileInfo.textContent = fileName ?
                 `File: ${fileName}${fileData.store ? ` | Store: ${fileData.store}` : ''}${fileData.version ? ` | Ver: ${fileData.version}` : ''}` :
                 'No file loaded';
-      
+
               // 9. 상태 표시기 추가
               const statusIndicator = document.createElement('span');
               statusIndicator.style.marginLeft = '10px';
@@ -318,14 +318,14 @@ document.addEventListener('DOMContentLoaded', async () => {
               pageLoadSuccess = isValid;
 
               fileInfo.appendChild(statusIndicator);
-      
+
               statusBar.appendChild(pageInfo);
               statusBar.appendChild(fileInfo);
-      
+
               // 10. 헤더에 상태 바 추가
               const header = document.querySelector('.session-card-header');
               if (header) header.prepend(statusBar);
-      
+
               // 디버깅 로그
               console.log('Validation:', {
                 appVersion: version,
@@ -382,15 +382,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                     console.log("do parse and")
                     const contextDiv = frame.querySelector('.context-cell > div');
                     if (!contextDiv) return null;
-                    
+
                     const text = contextDiv.textContent.trim();
 
-                    
+
                     const methodMatch = text.match(/([^\s]+)\s*\(/);
                     const classMatch = text.match(/\(([^)]+)\)/);
 
                     console.log("method::"+methodMatch);
-                    
+
                     return {
                       methodName: methodMatch ? methodMatch[1].split('.').pop() : null,
                       className: classMatch ? classMatch[1].split('+')[0] : null
@@ -400,7 +400,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                   function parseiOSStack(frame) {
                     const symbolDiv = frame.querySelector('.frame-symbol');
                     const fileLine = frame.querySelector('.frame-file-line span');
-                    
+
                     return {
                       methodName: symbolDiv?.textContent.trim(),
                       className: fileLine?.textContent.trim()
@@ -412,19 +412,19 @@ document.addEventListener('DOMContentLoaded', async () => {
               document.querySelectorAll('c9s-stack-frame').forEach(frame => {
                 const contextDiv = frame.querySelector('.context-cell > div');
                 if (!contextDiv) return;
-      
+
                 const originalText = contextDiv.textContent.trim();
                 // const methodName = extractMethodName(originalText);
                 // const className = extractClassName(originalText);
 
-                const { methodName, className } = isiOS ? 
-                parseiOSStack(frame) : 
+                const { methodName, className } = isiOS ?
+                parseiOSStack(frame) :
                 parseAndroidStack(frame);
 
                 console.log(methodName, className);
-      
+
                 if (!methodName || !className) return;
-      
+
                 // 변환된 텍스트 찾기
                 let translatedText = 'Not found';
                 if (parsedMapping) {
@@ -453,7 +453,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     translatedText = 'Not Found';
                   }
                 }
-      
+
                 // 기존 변환 결과 제거 또는 업데이트
                 let translationSpan = contextDiv.querySelector('.stack-translation');
                 if (!translationSpan) {
@@ -466,7 +466,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 else {
                     console.log("이미존재함")
                 }
-                
+
                 // 내용 업데이트 (덮어쓰기)
                 translationSpan.textContent = `Translated => ${translatedText}`;
                 // if(loadSuccess == false){
