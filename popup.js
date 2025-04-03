@@ -435,9 +435,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                         const symbolDiv = frame.querySelector('.frame-symbol');
                         const fileLine = frame.querySelector('.frame-file-line span');
 
+                        console.log("sym " +symbolDiv?.textContent);
+                        console.log("fileLine " +fileLine?.textContent);
+                        let methodName = fileLine?.textContent.trim();
+                        let className = symbolDiv?.textContent.trim();
+
                         return {
-                            methodName: symbolDiv?.textContent.trim(),
-                            className: fileLine?.textContent.trim()
+                            methodName: methodName.includes('+') ? methodName.split('+')[1].trim() : methodName,
+                            className: className
                         };
                     }
 
