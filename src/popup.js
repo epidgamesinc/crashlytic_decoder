@@ -2,341 +2,449 @@
 
 import './styles.css';
 
-(function () {
-  const pako = require('pako');
+const pako = require('pako');
 
-  const test = { my: 'super', puper: [456, 567], awesome: 'pako' };
+const test = { my: 'super', puper: [456, 567], awesome: 'pako' };
 
-  const compressed = pako.deflate(JSON.stringify(test));
+const compressed = pako.deflate(JSON.stringify(test));
 
-  console.log(compressed);
+console.log(compressed);
 
-  const restored = JSON.parse(pako.inflate(compressed, { to: 'string' }));
+const restored = JSON.parse(pako.inflate(compressed, { to: 'string' }));
 
-  console.log(restored);
+console.log(restored);
 // 기존 코드 시작 부분에 메시지 리스너 추가
+var your_input_string = "hello hello hello!";
+var compressed_uint8array = pako.gzip(your_input_string);
+var b64encoded_string = btoa(String.fromCharCode.apply(null, compressed_uint8array));
+console.log(b64encoded_string);
 
-  let FileLoadSuccess = false;
-  let PageLoadSuccess = false;
-  let MappingData = null;
-  let FileName = '';
-  let IsDebugMode = false;
-  let TestVal = 1;
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
-    if (request.action === 'PAGE_NAVIGATED') {
-      // 현재 활성 탭이 메시지를 보낸 탭과 같은지 확인
-      chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
-        if (tabs[0] && tabs[0].id === request.tabId) {
-          setTimeout(() => {
-            checkForCrashlyticsStack();
-            sendResponse({ success: true }); // 응답 전송 (필요한 경우)
-          }, 2000);
-        }
-      });
-    }
-  });
+let FileLoadSuccess = false;
+let PageLoadSuccess = false;
+let MappingData = null;
+let FileName = '';
+let IsDebugMode = false;
+let TestVal = 1;
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'PAGE_NAVIGATED') {
+    // 현재 활성 탭이 메시지를 보낸 탭과 같은지 확인
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0] && tabs[0].id === request.tabId) {
+        setTimeout(() => {
+          checkForCrashlyticsStack();
+          sendResponse({ success: true }); // 응답 전송 (필요한 경우)
+        }, 2000);
+      }
+    });
+  }
+});
 
 // 기존의 DOMContentLoaded 이벤트 리스너와 나머지 코드...
 
-  document.addEventListener('DOMContentLoaded', async () => {
-    const dropZone = document.getElementById('drop-zone');
-    const fileUpload = document.getElementById('file-upload');
-    const fileNameElement = document.getElementById('file-name');
-    // const fileContent = document.getElementById('file-content');
-    const fileInfo = document.getElementById('file-info');
-    const fileContainer = document.getElementById('file-input-container');
-    const clearBtn = document.getElementById('clear-btn');
+document.addEventListener('DOMContentLoaded', async () => {
+  const dropZone = document.getElementById('drop-zone');
+  const fileUpload = document.getElementById('file-upload');
+  const fileNameElement = document.getElementById('file-name');
+  // const fileContent = document.getElementById('file-content');
+  const fileInfo = document.getElementById('file-info');
+  const fileContainer = document.getElementById('file-input-container');
+  const clearBtn = document.getElementById('clear-btn');
 
-    let {mappingData, fileLoadSuccess, fileName, isDebugMode} = await loadFromMemory();
-    let pageLoadSuccess = false;
-    fileLoadSuccess = mappingData != null;
+  let { mappingData, fileLoadSuccess, fileName, isDebugMode } =
+    await loadFromMemory();
+  let pageLoadSuccess = false;
+  fileLoadSuccess = mappingData != null;
 
-    FileLoadSuccess = fileLoadSuccess;
-    MappingData = mappingData;
-    FileName = fileName;
-    IsDebugMode = isDebugMode;
+  FileLoadSuccess = fileLoadSuccess;
+  MappingData = mappingData;
+  FileName = fileName;
+  IsDebugMode = isDebugMode;
 
-    console.log("DOM LOADED");
-    console.log(TestVal);
-    //console.log(mappingData, fileLoadSuccess, pageLoadSuccess, fileName, isDebugMode);
+  console.log('DOM LOADED');
+  console.log(TestVal);
+  //console.log(mappingData, fileLoadSuccess, pageLoadSuccess, fileName, isDebugMode);
 
-    fileUpload.addEventListener('change', handleFileSelect);
+  fileUpload.addEventListener('change', handleFileSelect);
 
-    // 드래그 앤 드롭 이벤트
-    setupDragAndDrop();
+  // 드래그 앤 드롭 이벤트
+  setupDragAndDrop();
 
-    // 내용 지우기 버튼
-    clearBtn.addEventListener('click', clearFile);
+  // 내용 지우기 버튼
+  clearBtn.addEventListener('click', clearFile);
 
-    await init();
+  await init();
 
-
-    async function saveToMemory(cb) {
-      return new Promise((resolve) => {
-        chrome.runtime.sendMessage({
+  async function saveToMemory(cb) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
           action: 'SET_DATA',
           ...{
             mappingData: mappingData,
             loadSuccess: pageLoadSuccess,
             fileName: fileNameElement.textContent,
-            isDebugMode: isDebugMode
-          }
-        }, (response) => {
+            isDebugMode: isDebugMode,
+          },
+        },
+        (response) => {
           resolve(response?.success ?? false);
           if (cb != null) cb();
-        });
-      });
-    }
+        }
+      );
+    });
+  }
 
-// 데이터 불러오기
-    async function loadFromMemory(cb) {
-      return new Promise((resolve) => {
-        chrome.runtime.sendMessage({
-          action: 'GET_DATA'
-        }, (response) => {
+  // 데이터 불러오기
+  async function loadFromMemory(cb) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          action: 'GET_DATA',
+        },
+        (response) => {
           resolve(response || {});
           if (cb != null) cb();
-        });
-      });
+        }
+      );
+    });
+  }
+
+  async function init() {
+    showLoading(); // 로딩 시작
+
+    pageLoadSuccess = await checkPage(
+      fileNameElement?.textContent == null || fileNameElement?.textContent != ''
+        ? fileNameElement?.textContent
+        : fileName
+    ); // 파일명 전달
+    PageLoadSuccess = pageLoadSuccess;
+    checkForCrashlyticsStack();
+
+    //console.log("await loadsuccess " + pageLoadSuccess);
+    displayFile(
+      fileNameElement?.textContent == null || fileNameElement?.textContent != ''
+        ? fileNameElement?.textContent
+        : fileName,
+      mappingData != null ? JSON.stringify(mappingData) : ''
+    );
+    await saveToMemory();
+
+    hideLoading();
+
+    showHUD(); // HUD 표시 추가
+  }
+
+  function showHUD() {
+    const hudContainer = document.createElement('div');
+    hudContainer.id = 'hud-container';
+    hudContainer.style.padding = '10px';
+    hudContainer.style.marginBottom = '15px';
+    hudContainer.style.borderRadius = '4px';
+    hudContainer.style.textAlign = 'center';
+    hudContainer.style.fontWeight = 'bold';
+
+    if (pageLoadSuccess && fileLoadSuccess) {
+      hudContainer.textContent = '해독이 정상적으로 적용중입니다';
+      hudContainer.style.backgroundColor = '#e6f7e6';
+      hudContainer.style.color = '#2e7d32';
+    } else {
+      hudContainer.textContent =
+        '파일이 없거나 잘못된 파일(앱버전, os 불일치), 혹은 잘못된 페이지입니다.';
+      hudContainer.style.backgroundColor = '#ffebee';
+      hudContainer.style.color = '#c62828';
     }
 
-    async function init() {
-      showLoading(); // 로딩 시작
+    // 기존 HUD 제거
+    const existingHud = document.getElementById('hud-container');
+    if (existingHud) {
+      existingHud.remove();
+    }
 
-      pageLoadSuccess = await checkPage(fileNameElement?.textContent == null || fileNameElement?.textContent != '' ? fileNameElement?.textContent : fileName); // 파일명 전달
+    // 컨테이너 최상단에 추가
+    const container = document.querySelector('.container');
+    container.insertBefore(hudContainer, container.firstChild);
+  }
+
+  function setupDragAndDrop() {
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((eventName) => {
+      dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    ['dragenter', 'dragover'].forEach((eventName) => {
+      dropZone.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach((eventName) => {
+      dropZone.addEventListener(eventName, unhighlight, false);
+    });
+
+    dropZone.addEventListener('drop', handleDrop, false);
+  }
+
+  function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function highlight() {
+    dropZone.classList.add('highlight');
+  }
+
+  function unhighlight() {
+    dropZone.classList.remove('highlight');
+  }
+
+  function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    handleFiles(files);
+  }
+
+  function handleFileSelect(e) {
+    const files = e.target.files;
+    handleFiles(files);
+  }
+
+  function handleFiles(files) {
+    if (files.length > 0) {
+      const file = files[0];
+
+      if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+        readFile(file);
+      } else {
+        displayError('텍스트 파일(.txt)만 지원합니다.');
+      }
+    }
+  }
+
+  async function readFile(file) {
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      showLoading();
+
+      const content = e.target.result;
+      processMappingData(content);
+      pageLoadSuccess = await checkPage(file.name); // 파일명 전달
       PageLoadSuccess = pageLoadSuccess;
+      displayFile(file.name, content);
       checkForCrashlyticsStack();
+      //console.log("로드완료")
 
-      //console.log("await loadsuccess " + pageLoadSuccess);
-      displayFile(fileNameElement?.textContent == null || fileNameElement?.textContent != '' ? fileNameElement?.textContent : fileName, mappingData != null ? JSON.stringify(mappingData) : '');
       await saveToMemory();
 
       hideLoading();
-
       showHUD(); // HUD 표시 추가
-    }
+    };
 
-    function showHUD() {
-      const hudContainer = document.createElement('div');
-      hudContainer.id = 'hud-container';
-      hudContainer.style.padding = '10px';
-      hudContainer.style.marginBottom = '15px';
-      hudContainer.style.borderRadius = '4px';
-      hudContainer.style.textAlign = 'center';
-      hudContainer.style.fontWeight = 'bold';
+    reader.onerror = () => {
+      displayError('파일을 읽는 중 오류가 발생했습니다.');
+    };
 
-      if (pageLoadSuccess && fileLoadSuccess) {
-        hudContainer.textContent = '해독이 정상적으로 적용중입니다';
-        hudContainer.style.backgroundColor = '#e6f7e6';
-        hudContainer.style.color = '#2e7d32';
-      } else {
-        hudContainer.textContent = '파일이 없거나 잘못된 파일(앱버전, os 불일치), 혹은 잘못된 페이지입니다.';
-        hudContainer.style.backgroundColor = '#ffebee';
-        hudContainer.style.color = '#c62828';
-      }
+    reader.readAsText(file);
+  }
 
-      // 기존 HUD 제거
-      const existingHud = document.getElementById('hud-container');
-      if (existingHud) {
-        existingHud.remove();
-      }
+  // 로딩 표시 함수
+  function showLoading() {
+    const overlay = document.getElementById('loading-overlay');
+    overlay.style.display = 'flex';
+  }
 
-      // 컨테이너 최상단에 추가
-      const container = document.querySelector('.container');
-      container.insertBefore(hudContainer, container.firstChild);
-    }
+  // 로딩 숨기기 함수
+  function hideLoading() {
+    const overlay = document.getElementById('loading-overlay');
+    overlay.style.display = 'none';
+  }
 
-    function setupDragAndDrop() {
-      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, preventDefaults, false);
-      });
+  function displayFile(name, content) {
+    fileNameElement.textContent = `${name}`;
+    // fileContent.textContent = content;
+    fileInfo.style.display = fileLoadSuccess ? 'block' : 'none';
+    fileContainer.style.display = fileLoadSuccess ? 'none' : 'block';
+  }
 
-      ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, highlight, false);
-      });
+  function displayError(message) {
+    // fileContent.textContent = message;
+    fileInfo.style.display = 'block';
+    // chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
+  }
 
-      ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, unhighlight, false);
-      });
+  async function clearFile() {
+    fileNameElement.textContent = '';
+    // fileContent.textContent = '';
+    fileContainer.style.display = 'block';
+    fileInfo.style.display = 'none';
+    fileUpload.value = '';
+    fileName = '';
+    fileLoadSuccess = false;
+    FileLoadSuccess = fileLoadSuccess;
+    mappingData = null;
+    saveToMemory();
+    // chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
+    await checkPage(
+      fileNameElement?.textContent == null || fileNameElement?.textContent != ''
+        ? fileNameElement?.textContent
+        : fileName
+    ); // 파일명 전달
+    checkForCrashlyticsStack();
+    displayFile('', '');
+    showHUD(); // HUD 표시 추가
+  }
 
-      dropZone.addEventListener('drop', handleDrop, false);
-    }
-
-    function preventDefaults(e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    function highlight() {
-      dropZone.classList.add('highlight');
-    }
-
-    function unhighlight() {
-      dropZone.classList.remove('highlight');
-    }
-
-    function handleDrop(e) {
-      const dt = e.dataTransfer;
-      const files = dt.files;
-      handleFiles(files);
-    }
-
-    function handleFileSelect(e) {
-      const files = e.target.files;
-      handleFiles(files);
-    }
-
-    function handleFiles(files) {
-      if (files.length > 0) {
-        const file = files[0];
-
-        if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-          readFile(file);
-        } else {
-          displayError('텍스트 파일(.txt)만 지원합니다.');
-        }
-      }
-    }
-
-    async function readFile(file) {
-
-      const reader = new FileReader();
-
-      reader.onload = async (e) => {
-        showLoading();
-
-        const content = e.target.result;
-        processMappingData(content);
-        pageLoadSuccess = await checkPage(file.name); // 파일명 전달
-        PageLoadSuccess = pageLoadSuccess;
-        displayFile(file.name, content);
-        checkForCrashlyticsStack();
-        //console.log("로드완료")
-
-        await saveToMemory();
-
-        hideLoading()
-        showHUD(); // HUD 표시 추가
-
-      };
-
-      reader.onerror = () => {
-        displayError('파일을 읽는 중 오류가 발생했습니다.');
-      };
-
-      reader.readAsText(file);
-    }
-
-    // 로딩 표시 함수
-    function showLoading() {
-      const overlay = document.getElementById('loading-overlay');
-      overlay.style.display = 'flex';
-    }
-
-// 로딩 숨기기 함수
-    function hideLoading() {
-      const overlay = document.getElementById('loading-overlay');
-      overlay.style.display = 'none';
-    }
-
-    function displayFile(name, content) {
-      fileNameElement.textContent = `${name}`;
-      // fileContent.textContent = content;
-      fileInfo.style.display = fileLoadSuccess ? 'block' : 'none';
-      fileContainer.style.display = fileLoadSuccess ? 'none' : 'block';
-
-    }
-
-    function displayError(message) {
-      // fileContent.textContent = message;
-      fileInfo.style.display = 'block';
-      // chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
-    }
-
-    async function clearFile() {
-      fileNameElement.textContent = '';
-      // fileContent.textContent = '';
-      fileContainer.style.display = 'block';
-      fileInfo.style.display = 'none';
-      fileUpload.value = '';
-      fileName = '';
-      fileLoadSuccess = false;
+  function processMappingData(content) {
+    try {
+      mappingData = JSON.parse(content);
+      fileLoadSuccess = true;
       FileLoadSuccess = fileLoadSuccess;
-      mappingData = null;
-      saveToMemory();
-      // chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
-      await checkPage(fileNameElement?.textContent == null || fileNameElement?.textContent != '' ? fileNameElement?.textContent : fileName); // 파일명 전달
-      checkForCrashlyticsStack();
-      displayFile('', '')
-      showHUD(); // HUD 표시 추가
 
+      var encoded = partialEncode(content);
+
+      console.log(encoded);
+
+      console.log("@@@");
+
+      console.log(partialDecode(encoded))
+
+      chrome.storage.local.set({ mappingData: b64encoded_string });
+    } catch (e) {
+      console.error('매핑 데이터 파싱 실패:', e);
+      mappingData = null;
+    }
+  }
+
+  function partialEncode(content) {
+    var compressed = pako.gzip(content);
+    var chunkSize = 1020; // 4의 배수
+    var result = '';
+
+    for (var i = 0; i < compressed.length; i += chunkSize) {
+      var chunk = compressed.slice(i, i + chunkSize);
+      var binaryString = Array.from(chunk).map(c => String.fromCharCode(c)).join('');
+      result += btoa(binaryString);
     }
 
-    function processMappingData(content) {
+    return result;
+  }
+
+  function partialDecode(encodedString, originalChunkSize = 1020) {
+    var uint8Arrays = [];
+    var pos = 0;
+
+    while (pos < encodedString.length) {
+      // base64 문자열의 길이는 4의 배수여야 함
+      var chunkLength = Math.min(originalChunkSize * 4 / 3, encodedString.length - pos);
+      chunkLength = Math.floor(chunkLength / 4) * 4; // 4의 배수로 맞춤
+
+      var chunkB64 = encodedString.substr(pos, chunkLength);
+      pos += chunkLength;
+
       try {
-        mappingData = JSON.parse(content);
-        fileLoadSuccess = true;
-        FileLoadSuccess = fileLoadSuccess;
-        chrome.storage.local.set({mappingData:gzip.zip(content)});
+        var binaryString = atob(chunkB64);
+        var chunkArray = new Uint8Array(binaryString.length);
+        for (var i = 0; i < binaryString.length; i++) {
+          chunkArray[i] = binaryString.charCodeAt(i);
+        }
+        uint8Arrays.push(chunkArray);
       } catch (e) {
-        console.error('매핑 데이터 파싱 실패:', e);
-        mappingData = null;
+        console.error("청크 디코딩 실패:", e);
+        return null;
       }
     }
 
-    async function checkPage(fileName = '') {
-      return new Promise((resolve) => {
-        chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
-          chrome.scripting.executeScript({
-            target: {tabId: tabs[0].id},
+    // 모든 청크 병합
+    var totalLength = uint8Arrays.reduce((sum, arr) => sum + arr.length, 0);
+    var merged = new Uint8Array(totalLength);
+    var offset = 0;
+    uint8Arrays.forEach(arr => {
+      merged.set(arr, offset);
+      offset += arr.length;
+    });
+
+    // 압축 해제
+    try {
+      var decompressed = pako.ungzip(merged, { to: 'string' });
+      return JSON.parse(decompressed);
+    } catch (e) {
+      console.error("처리 실패:", e);
+      return null;
+    }
+  }
+
+  async function checkPage(fileName = '') {
+    return new Promise((resolve) => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        chrome.scripting.executeScript(
+          {
+            target: { tabId: tabs[0].id },
             func: (fileName) => {
               // 1. 기존 상태 바 제거
-              const existingStatusBar = document.querySelector('.custom-status-bar');
+              const existingStatusBar =
+                document.querySelector('.custom-status-bar');
               if (existingStatusBar) existingStatusBar.remove();
 
               // 2. 버전 정보 추출
-              const versionElement = document.querySelector('.session-build-version .header-item-text');
+              const versionElement = document.querySelector(
+                '.session-build-version .header-item-text'
+              );
               let version = '';
               if (versionElement) {
-                const versionMatch = versionElement.textContent.trim().match(/\d+/);
+                const versionMatch = versionElement.textContent
+                  .trim()
+                  .match(/\d+/);
                 version = versionMatch ? versionMatch[0] : '';
               }
 
               // 3. OS 정보 추출
-              const osIcon = document.querySelector('.session-os .platform-icon');
+              const osIcon = document.querySelector(
+                '.session-os .platform-icon'
+              );
               let os = 'unknown';
               if (osIcon) {
-                const osName = (osIcon?.innerHTML ?? "") + "";
-                os = osName.includes('plat_android') ? 'Android' :
-                  osName.includes('plat_ios') ? 'iOS' : 'unknown';
+                const osName = (osIcon?.innerHTML ?? '') + '';
+                os = osName.includes('plat_android')
+                  ? 'Android'
+                  : osName.includes('plat_ios')
+                  ? 'iOS'
+                  : 'unknown';
               }
 
               // 4. 파일명 파싱
               const parseFileName = (fileName) => {
-                if (!fileName) return {store: '', version: ''};
+                if (!fileName) return { store: '', version: '' };
 
-                let store = fileName.includes('GooglePlayStore') ? 'Android' :
-                  fileName.includes('AppleAppStore') ? 'iOS' : '';
+                let store = fileName.includes('GooglePlayStore')
+                  ? 'Android'
+                  : fileName.includes('AppleAppStore')
+                  ? 'iOS'
+                  : '';
 
                 let fileVersion = '';
                 const versionMatch = fileName.match(/Ver (\d+\.\d+\.\d+)/);
                 if (versionMatch) {
                   const parts = versionMatch[1].split('.');
-                  fileVersion = parts.length === 3 ?
-                    `${parts[0]}${parts[1].padStart(2, '0')}${parts[2].padStart(2, '0')}` : '';
+                  fileVersion =
+                    parts.length === 3
+                      ? `${parts[0]}${parts[1].padStart(
+                          2,
+                          '0'
+                        )}${parts[2].padStart(2, '0')}`
+                      : '';
                 }
 
-                return {store, version: fileVersion};
+                return { store, version: fileVersion };
               };
 
               //console.log("파일명: " + fileName);
               const fileData = parseFileName(fileName);
 
               // 5. 검증 로직
-              const isVersionMatch = version && fileData.version && version === fileData.version;
-              const isOSMatch = os !== 'unknown' && fileData.store && os === fileData.store;
-              const isValid = fileName != null && isVersionMatch == true && isOSMatch == true;
+              const isVersionMatch =
+                version && fileData.version && version === fileData.version;
+              const isOSMatch =
+                os !== 'unknown' && fileData.store && os === fileData.store;
+              const isValid =
+                fileName != null && isVersionMatch == true && isOSMatch == true;
               //console.log("isValid => " + isValid);
 
               // 6. 상태 바 생성
@@ -349,7 +457,7 @@ import './styles.css';
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                fontSize: '14px'
+                fontSize: '14px',
               });
 
               // 7. 페이지 정보 표시
@@ -358,9 +466,11 @@ import './styles.css';
 
               // 8. 파일 정보 표시
               const fileInfo = document.createElement('div');
-              fileInfo.textContent = fileName ?
-                `File: ${fileName}${fileData.store ? ` | Store: ${fileData.store}` : ''}${fileData.version ? ` | Ver: ${fileData.version}` : ''}` :
-                'No file loaded';
+              fileInfo.textContent = fileName
+                ? `File: ${fileName}${
+                    fileData.store ? ` | Store: ${fileData.store}` : ''
+                  }${fileData.version ? ` | Ver: ${fileData.version}` : ''}`
+                : 'No file loaded';
 
               // 9. 상태 표시기 추가
               const statusIndicator = document.createElement('span');
@@ -393,261 +503,272 @@ import './styles.css';
 
               return isValid; // 이 값을 resolve로 전달
             },
-            args: [fileName.replace('파일 이름: ', '')]
-          }, (results) => {
+            args: [fileName.replace('파일 이름: ', '')],
+          },
+          (results) => {
             // executeScript의 콜백에서 결과 처리
             const isValid = results?.[0]?.result ?? false;
             //console.log("Resolve " + isValid);
             resolve(isValid);
-          });
-        });
+          }
+        );
       });
-    }
+    });
+  }
+});
 
+function checkForCrashlyticsStack() {
+  console.log('checkForCrashlyticsStack');
+  if (FileLoadSuccess == false) {
+    return;
+  }
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    chrome.scripting.executeScript({
+      target: { tabId: tabs[0].id },
+      func: (mappingData) => {
+        if (mappingData == null) {
+          //console.log("맵핑 데이터 없어서 리턴");
+          return;
+        }
 
-  });
-
-  function checkForCrashlyticsStack() {
-    console.log("checkForCrashlyticsStack")
-    if (FileLoadSuccess == false) {
-      return;
-    }
-    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
-      chrome.scripting.executeScript({
-        target: {tabId: tabs[0].id},
-        func: (mappingData) => {
-          if (mappingData == null) {
-            //console.log("맵핑 데이터 없어서 리턴");
+        // 매핑 데이터 파싱
+        let parsedMapping = null;
+        try {
+          parsedMapping = JSON.parse(mappingData);
+          if (parsedMapping?.MemberTyp_Mapping?.Method?.Mapping == null) {
+            //console.log("맵핑 데이터 없어서 리턴2");
             return;
           }
+        } catch (e) {
+          console.error('매핑 데이터 파싱 실패:', e);
+          return;
+        }
 
+        const osIcon = document.querySelector('.session-os .platform-icon');
+        const isiOS = osIcon?.innerHTML.includes('plat_ios');
 
-          // 매핑 데이터 파싱
-          let parsedMapping = null;
-          try {
-            parsedMapping = JSON.parse(mappingData);
-            if (parsedMapping?.MemberTyp_Mapping?.Method?.Mapping == null) {
-              //console.log("맵핑 데이터 없어서 리턴2");
-              return;
-            }
-          } catch (e) {
-            console.error('매핑 데이터 파싱 실패:', e);
-            return;
-          }
+        function parseAndroidStack(frame) {
+          const contextDiv = frame.querySelector('.context-cell > div');
+          if (!contextDiv) return null;
 
+          const text = contextDiv.textContent.trim();
+          const lastParenIndex = text.lastIndexOf('(');
 
-          const osIcon = document.querySelector('.session-os .platform-icon');
-          const isiOS = osIcon?.innerHTML.includes('plat_ios');
+          // 1. className 추출: 마지막 ( ~ ) 사이 내용에서 + 앞부분
+          const className = extractClassName(text);
 
-          function parseAndroidStack(frame) {
-            const contextDiv = frame.querySelector('.context-cell > div');
-            if (!contextDiv) return null;
-
-            const text = contextDiv.textContent.trim();
-            const lastParenIndex = text.lastIndexOf('(');
-
-            // 1. className 추출: 마지막 ( ~ ) 사이 내용에서 + 앞부분
-            const className = extractClassName(text);
-
-            // 2. methodName 추출
-            let methodName = '';
-            if (text.includes('+')) {
-              // +가 있는 경우: + ~ ( 사이
-              const plusIndex = text.indexOf('+');
-              methodName = text.slice(plusIndex + 1, lastParenIndex).trim();
-            } else {
-              // +가 없는 경우: 마지막 . ~ ( 사이
-              const lastDotIndex = text.lastIndexOf('.', lastParenIndex);
-              methodName = text.slice(lastDotIndex + 1, lastParenIndex).trim();
-            }
-
-            return { methodName, className };
-          }
-
-// className 추출 헬퍼 함수
-          function extractClassName(text) {
-            const betweenParen = text.slice(
-              text.lastIndexOf('(') + 1,
-              text.lastIndexOf(')')
-            ).trim();
-            return betweenParen.split('+')[0]; // +가 없으면 전체 반환
-          }
-// methodName 추출 함수
-          function extractMethodName(text) {
+          // 2. methodName 추출
+          let methodName = '';
+          if (text.includes('+')) {
+            // +가 있는 경우: + ~ ( 사이
             const plusIndex = text.indexOf('+');
-            const lastDotIndex = text.lastIndexOf('.');
-            const lastParenIndex = text.lastIndexOf('(');
-
-            if (plusIndex !== -1) {
-              // '+'가 있는 경우: '+'부터 '('까지
-              return text.substring(plusIndex + 1, lastParenIndex).trim();
-            } else if (lastDotIndex !== -1) {
-              // '+'는 없고 '.'이 있는 경우: 마지막 '.'부터 '('까지
-              return text.substring(lastDotIndex + 1, lastParenIndex).trim();
-            }
-            return ''; // 둘 다 없는 경우
+            methodName = text.slice(plusIndex + 1, lastParenIndex).trim();
+          } else {
+            // +가 없는 경우: 마지막 . ~ ( 사이
+            const lastDotIndex = text.lastIndexOf('.', lastParenIndex);
+            methodName = text.slice(lastDotIndex + 1, lastParenIndex).trim();
           }
 
-          function parseiOSStack(frame) {
-            const symbolDiv = frame.querySelector('.frame-symbol');
-            const fileLine = frame.querySelector('.frame-file-line span');
+          return { methodName, className };
+        }
 
-            console.log("sym " +symbolDiv?.textContent);
-            console.log("fileLine " +fileLine?.textContent);
-            let className = fileLine?.textContent.trim();
-            let methodName = symbolDiv?.textContent.trim();
+        // className 추출 헬퍼 함수
+        function extractClassName(text) {
+          const betweenParen = text
+            .slice(text.lastIndexOf('(') + 1, text.lastIndexOf(')'))
+            .trim();
+          return betweenParen.split('+')[0]; // +가 없으면 전체 반환
+        }
 
-            if(className.includes('+')){
-              methodName += '.'+className.split('+')[1].trim();
-              className = className.split('+')[0].trim();
+        // methodName 추출 함수
+        function extractMethodName(text) {
+          const plusIndex = text.indexOf('+');
+          const lastDotIndex = text.lastIndexOf('.');
+          const lastParenIndex = text.lastIndexOf('(');
 
-            }
+          if (plusIndex !== -1) {
+            // '+'가 있는 경우: '+'부터 '('까지
+            return text.substring(plusIndex + 1, lastParenIndex).trim();
+          } else if (lastDotIndex !== -1) {
+            // '+'는 없고 '.'이 있는 경우: 마지막 '.'부터 '('까지
+            return text.substring(lastDotIndex + 1, lastParenIndex).trim();
+          }
+          return ''; // 둘 다 없는 경우
+        }
 
-            return {
-              methodName: methodName,
-              className: className
-            };
+        function parseiOSStack(frame) {
+          const symbolDiv = frame.querySelector('.frame-symbol');
+          const fileLine = frame.querySelector('.frame-file-line span');
+
+          console.log('sym ' + symbolDiv?.textContent);
+          console.log('fileLine ' + fileLine?.textContent);
+          let className = fileLine?.textContent.trim();
+          let methodName = symbolDiv?.textContent.trim();
+
+          if (className.includes('+')) {
+            methodName += '.' + className.split('+')[1].trim();
+            className = className.split('+')[0].trim();
           }
 
+          return {
+            methodName: methodName,
+            className: className,
+          };
+        }
 
-          // DOM 조작
-          document.querySelectorAll('c9s-stack-frame').forEach(frame => {
-            const contextDiv = frame.querySelector('.context-cell > div');
-            if (!contextDiv) return;
+        // DOM 조작
+        document.querySelectorAll('c9s-stack-frame').forEach((frame) => {
+          const contextDiv = frame.querySelector('.context-cell > div');
+          if (!contextDiv) return;
 
-            const originalText = contextDiv.textContent.trim();
-            // const methodName = extractMethodName(originalText);
-            // const className = extractClassName(originalText);
+          const originalText = contextDiv.textContent.trim();
+          // const methodName = extractMethodName(originalText);
+          // const className = extractClassName(originalText);
 
-            const {methodName, className} = isiOS ?
-              parseiOSStack(frame) :
-              parseAndroidStack(frame);
+          const { methodName, className } = isiOS
+            ? parseiOSStack(frame)
+            : parseAndroidStack(frame);
 
-            //console.log("@@  " + methodName, className);
+          //console.log("@@  " + methodName, className);
 
-            if (!methodName || !className) return;
+          if (!methodName || !className) return;
 
-            // 변환된 텍스트 찾기
-            let translatedText = '';
-            if (parsedMapping) {
-              methodName.split('.').forEach(methodName => {
-                var exist = false;
-                console.log("TARGET : M" + methodName + " / " + className);
+          // 변환된 텍스트 찾기
+          let translatedText = '';
+          if (parsedMapping) {
+            methodName.split('.').forEach((methodName) => {
+              var exist = false;
+              console.log('TARGET : M' + methodName + ' / ' + className);
 
-                for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Method.Mapping)) {
+              for (const [key, value] of Object.entries(
+                parsedMapping.MemberTyp_Mapping.Method.Mapping
+              )) {
+                if (value === methodName && key.includes(className)) {
+                  translatedText += key + '\n';
+                  exist = true;
+                  break;
+                }
+              }
+
+              if (exist == false) {
+                for (const [key, value] of Object.entries(
+                  parsedMapping.MemberTyp_Mapping.Event.Mapping
+                )) {
                   if (value === methodName && key.includes(className)) {
-                    translatedText += (key + '\n');
+                    translatedText += key + '\n';
                     exist = true;
                     break;
                   }
                 }
+              }
 
-                if (exist == false) {
-                  for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Event.Mapping)) {
-                    if (value === methodName && key.includes(className)) {
-                      translatedText += key + '\n';
-                      exist = true;
-                      break;
-                    }
-                  }
-
-                }
-
-                if (exist == false) {
-
-                  for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Type.Mapping)) {
-                    if (value === methodName && key.includes(className)) {
-                      translatedText += key + '\n';
-                      exist = true;
-                      break;
-                    }
-                  }
-                }
-
-                if (exist == false) {
-                  for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Field.Mapping)) {
-                    if (value === methodName && key.includes(className)) {
-                      translatedText += key + '\n';
-                      exist = true;
-                      break;
-                    }
-                  }
-                }
-
-                if (exist == false) {
-                  for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Property.Mapping)) {
-                    if (value === methodName && key.includes(className)) {
-                      translatedText += key + '\n';
-                      exist = true;
-                      break;
-                    }
-                  }
-                }
-
-
-              })
-
-
-              if (translatedText == '') {
-                for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Method.Mapping)) {
-                  if (value === methodName) {
-                    translatedText += (key + '\n');
-                  }
-                }
-
-                for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Event.Mapping)) {
-                  if (value === methodName) {
+              if (exist == false) {
+                for (const [key, value] of Object.entries(
+                  parsedMapping.MemberTyp_Mapping.Type.Mapping
+                )) {
+                  if (value === methodName && key.includes(className)) {
                     translatedText += key + '\n';
+                    exist = true;
+                    break;
                   }
-                }
-
-                for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Type.Mapping)) {
-                  if (value === methodName) {
-                    translatedText += key + '\n';
-                  }
-                }
-                for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Field.Mapping)) {
-                  if (value === methodName) {
-                    translatedText += key + '\n';
-                  }
-                }
-
-                for (const [key, value] of Object.entries(parsedMapping.MemberTyp_Mapping.Property.Mapping)) {
-                  if (value === methodName) {
-                    translatedText += key + '\n';
-                  }
-                }
-                if (translatedText == '') {
-                  translatedText = 'Not Found';
                 }
               }
-            }
 
-            // 기존 변환 결과 제거 또는 업데이트
-            let translationSpan = contextDiv.querySelector('.stack-translation');
-            if (!translationSpan) {
-              translationSpan = document.createElement('span');
-              translationSpan.className = 'stack-translation';
-              contextDiv.appendChild(document.createElement('br'));
-              contextDiv.appendChild(translationSpan);
-            } else {
-            }
+              if (exist == false) {
+                for (const [key, value] of Object.entries(
+                  parsedMapping.MemberTyp_Mapping.Field.Mapping
+                )) {
+                  if (value === methodName && key.includes(className)) {
+                    translatedText += key + '\n';
+                    exist = true;
+                    break;
+                  }
+                }
+              }
 
-            // 내용 업데이트 (덮어쓰기)
-            translationSpan.textContent = `Translated => ${translatedText}`;
-            if (translationSpan) {
-              translationSpan.innerHTML = translationSpan.textContent.replaceAll(/</g, '&lt;').replaceAll(/>/g, '&gt;').replaceAll(/\n/g, '<br>');
+              if (exist == false) {
+                for (const [key, value] of Object.entries(
+                  parsedMapping.MemberTyp_Mapping.Property.Mapping
+                )) {
+                  if (value === methodName && key.includes(className)) {
+                    translatedText += key + '\n';
+                    exist = true;
+                    break;
+                  }
+                }
+              }
+            });
+
+            if (translatedText == '') {
+              for (const [key, value] of Object.entries(
+                parsedMapping.MemberTyp_Mapping.Method.Mapping
+              )) {
+                if (value === methodName) {
+                  translatedText += key + '\n';
+                }
+              }
+
+              for (const [key, value] of Object.entries(
+                parsedMapping.MemberTyp_Mapping.Event.Mapping
+              )) {
+                if (value === methodName) {
+                  translatedText += key + '\n';
+                }
+              }
+
+              for (const [key, value] of Object.entries(
+                parsedMapping.MemberTyp_Mapping.Type.Mapping
+              )) {
+                if (value === methodName) {
+                  translatedText += key + '\n';
+                }
+              }
+              for (const [key, value] of Object.entries(
+                parsedMapping.MemberTyp_Mapping.Field.Mapping
+              )) {
+                if (value === methodName) {
+                  translatedText += key + '\n';
+                }
+              }
+
+              for (const [key, value] of Object.entries(
+                parsedMapping.MemberTyp_Mapping.Property.Mapping
+              )) {
+                if (value === methodName) {
+                  translatedText += key + '\n';
+                }
+              }
+              if (translatedText == '') {
+                translatedText = 'Not Found';
+              }
             }
-            //console.log(parsedMapping);
-            // if(loadSuccess == false){
-            //     translationSpan.textContent = '로드 실패';
-            // }
-          });
-        },
-        args: [MappingData ? JSON.stringify(MappingData) : '{}']
-      });
+          }
+
+          // 기존 변환 결과 제거 또는 업데이트
+          let translationSpan = contextDiv.querySelector('.stack-translation');
+          if (!translationSpan) {
+            translationSpan = document.createElement('span');
+            translationSpan.className = 'stack-translation';
+            contextDiv.appendChild(document.createElement('br'));
+            contextDiv.appendChild(translationSpan);
+          } else {
+          }
+
+          // 내용 업데이트 (덮어쓰기)
+          translationSpan.textContent = `Translated => ${translatedText}`;
+          if (translationSpan) {
+            translationSpan.innerHTML = translationSpan.textContent
+              .replaceAll(/</g, '&lt;')
+              .replaceAll(/>/g, '&gt;')
+              .replaceAll(/\n/g, '<br>');
+          }
+          //console.log(parsedMapping);
+          // if(loadSuccess == false){
+          //     translationSpan.textContent = '로드 실패';
+          // }
+        });
+      },
+      args: [MappingData ? JSON.stringify(MappingData) : '{}'],
     });
-  }
-
-
-})();
+  });
+}

@@ -1,47 +1,52 @@
-// ¸Þ¸ð¸® ÀúÀå¼Ò
+// ï¿½Þ¸ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½
 const memoryStore = {
-    mappingData: null,
-    fileLoadSuccess: false,
-    fileName: '',
-    isDebugMode : false,
+  mappingData: null,
+  fileLoadSuccess: false,
+  fileName: '',
+  isDebugMode: false,
 };
 
-// ¸Þ½ÃÁö ÇÚµé·¯
+// ï¿½Þ½ï¿½ï¿½ï¿½ ï¿½Úµé·¯
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    switch (request.action) {
-        case 'SET_DATA':
-            memoryStore.mappingData = request.mappingData;
-            memoryStore.fileLoadSuccess = request.fileLoadSuccess;
-            memoryStore.fileName = request.fileName;
-            memoryStore.isDebugMode = request.isDebugMode;
-            sendResponse({ success: true });
-            break;
+  switch (request.action) {
+    case 'SET_DATA':
+      memoryStore.mappingData = request.mappingData;
+      memoryStore.fileLoadSuccess = request.fileLoadSuccess;
+      memoryStore.fileName = request.fileName;
+      memoryStore.isDebugMode = request.isDebugMode;
+      sendResponse({ success: true });
+      break;
 
-        case 'GET_DATA':
-            sendResponse({
-                mappingData: memoryStore.mappingData,
-                fileLoadSuccess: memoryStore.fileLoadSuccess,
-                fileName: memoryStore.fileName,
-                isDebugMode: memoryStore.isDebugMode,
-            });
-            break;
+    case 'GET_DATA':
+      sendResponse({
+        mappingData: memoryStore.mappingData,
+        fileLoadSuccess: memoryStore.fileLoadSuccess,
+        fileName: memoryStore.fileName,
+        isDebugMode: memoryStore.isDebugMode,
+      });
+      break;
 
-        default:
-            sendResponse({ error: 'Invalid action' });
-    }
+    default:
+      sendResponse({ error: 'Invalid action' });
+  }
 
-    return true; // ºñµ¿±â ÀÀ´ä Áö½Ã
+  return true; // ï¿½ñµ¿±ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 });
 
-
-// ÆäÀÌÁö ÀüÈ¯ ÀÌº¥Æ® ¸®½º³Ê Ãß°¡
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È¯ ï¿½Ìºï¿½Æ® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½
 
 // background.js
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.url && tab.active && tab.url.includes('console.firebase.google.com/u/0/project/trickcal-revive/crashlytics')) {
-        chrome.runtime.sendMessage({
-            action: 'PAGE_NAVIGATED',
-            tabId: tabId
-        });
-    }
+  if (
+    changeInfo.url &&
+    tab.active &&
+    tab.url.includes(
+      'console.firebase.google.com/u/0/project/trickcal-revive/crashlytics'
+    )
+  ) {
+    chrome.runtime.sendMessage({
+      action: 'PAGE_NAVIGATED',
+      tabId: tabId,
+    });
+  }
 });
