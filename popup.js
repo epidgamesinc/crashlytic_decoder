@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dropZone = document.getElementById('drop-zone');
     const fileUpload = document.getElementById('file-upload');
     const fileNameElement = document.getElementById('file-name');
-    const fileContent = document.getElementById('file-content');
+    // const fileContent = document.getElementById('file-content');
     const fileInfo = document.getElementById('file-info');
     const fileContainer = document.getElementById('file-input-container');
     const clearBtn = document.getElementById('clear-btn');
@@ -192,22 +192,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function displayFile(name, content) {
-        fileNameElement.textContent = `파일 이름: ${name}`;
-        fileContent.textContent = content;
+        fileNameElement.textContent = `${name}`;
+        // fileContent.textContent = content;
         fileInfo.style.display = fileLoadSuccess ? 'block' : 'none';
         fileContainer.style.display = fileLoadSuccess ? 'none' : 'block';
 
     }
 
     function displayError(message) {
-        fileContent.textContent = message;
+        // fileContent.textContent = message;
         fileInfo.style.display = 'block';
         // chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
     }
 
     async function clearFile() {
         fileNameElement.textContent = '';
-        fileContent.textContent = '';
+        // fileContent.textContent = '';
         fileContainer.style.display = 'block';
         fileInfo.style.display = 'none';
         fileUpload.value = '';
