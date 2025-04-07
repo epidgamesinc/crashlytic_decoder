@@ -4,28 +4,37 @@ import './styles.css';
 
 const pako = require('pako');
 
-const test = { my: 'super', puper: [456, 567], awesome: 'pako' };
-
-const compressed = pako.deflate(JSON.stringify(test));
-
-console.log(compressed);
-
-const restored = JSON.parse(pako.inflate(compressed, { to: 'string' }));
-
-console.log(restored);
-// 기존 코드 시작 부분에 메시지 리스너 추가
-var your_input_string = "hello hello hello!";
-var compressed_uint8array = pako.gzip(your_input_string);
-var b64encoded_string = btoa(String.fromCharCode.apply(null, compressed_uint8array));
-console.log(b64encoded_string);
-
-
 let FileLoadSuccess = false;
 let PageLoadSuccess = false;
 let MappingData = null;
 let FileName = '';
 let IsDebugMode = false;
 let TestVal = 1;
+
+// chrome.storage.local.get을 Promise로 래핑
+function getStorageData(key) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(key, (result) => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+      } else {
+        resolve(result[key]);
+      }
+    });
+  });
+}
+
+// await 사용 예시
+async function fetchMappingData() {
+  try {
+    const mappingData = await getStorageData('mappingData');
+    console.log(mappingData);
+  } catch (error) {
+    console.error('Error fetching mappingData:', error);
+  }
+}
+
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'PAGE_NAVIGATED') {
     // 현재 활성 탭이 메시지를 보낸 탭과 같은지 확인
@@ -300,13 +309,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       var encoded = partialEncode(content);
 
-      console.log(encoded);
+      chrome.storage.local.set({ mappingData: encoded });
 
-      console.log("@@@");
-
-      console.log(partialDecode(encoded))
-
-      chrome.storage.local.set({ mappingData: b64encoded_string });
+      console.log("DECODE");
+      console.log(partialDecode(encoded));
     } catch (e) {
       console.error('매핑 데이터 파싱 실패:', e);
       mappingData = null;
@@ -580,22 +586,6 @@ function checkForCrashlyticsStack() {
           return betweenParen.split('+')[0]; // +가 없으면 전체 반환
         }
 
-        // methodName 추출 함수
-        function extractMethodName(text) {
-          const plusIndex = text.indexOf('+');
-          const lastDotIndex = text.lastIndexOf('.');
-          const lastParenIndex = text.lastIndexOf('(');
-
-          if (plusIndex !== -1) {
-            // '+'가 있는 경우: '+'부터 '('까지
-            return text.substring(plusIndex + 1, lastParenIndex).trim();
-          } else if (lastDotIndex !== -1) {
-            // '+'는 없고 '.'이 있는 경우: 마지막 '.'부터 '('까지
-            return text.substring(lastDotIndex + 1, lastParenIndex).trim();
-          }
-          return ''; // 둘 다 없는 경우
-        }
-
         function parseiOSStack(frame) {
           const symbolDiv = frame.querySelector('.frame-symbol');
           const fileLine = frame.querySelector('.frame-file-line span');
@@ -621,15 +611,9 @@ function checkForCrashlyticsStack() {
           const contextDiv = frame.querySelector('.context-cell > div');
           if (!contextDiv) return;
 
-          const originalText = contextDiv.textContent.trim();
-          // const methodName = extractMethodName(originalText);
-          // const className = extractClassName(originalText);
-
           const { methodName, className } = isiOS
             ? parseiOSStack(frame)
             : parseAndroidStack(frame);
-
-          //console.log("@@  " + methodName, className);
 
           if (!methodName || !className) return;
 
