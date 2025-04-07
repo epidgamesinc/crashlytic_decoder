@@ -32,3 +32,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     return true; // 비동기 응답 지시
 });
+
+
+// 페이지 전환 이벤트 리스너 추가
+
+// background.js
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.url && tab.active && tab.url.includes('console.firebase.google.com/u/0/project/trickcal-revive/crashlytics')) {
+        chrome.runtime.sendMessage({
+            action: 'PAGE_NAVIGATED',
+            tabId: tabId
+        });
+    }
+});
