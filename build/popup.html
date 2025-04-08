@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>크래시리틱 해독기</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+
+      label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+      }
+
+      [type="checkbox"] {
+        appearance: none;
+        position: relative;
+        border: max(2px, 0.1em) solid gray;
+        border-radius: 1.25em;
+        width: 2.25em;
+        height: 1.25em;
+      }
+
+      [type="checkbox"]::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        width: 1em;
+        height: 1em;
+        border-radius: 50%;
+        transform: scale(0.8);
+        background-color: gray;
+        transition: left 250ms linear;
+      }
+
+      [type="checkbox"]:checked {
+        background-color: tomato;
+        border-color: tomato;
+      }
+
+      [type="checkbox"]:checked::before {
+        background-color: white;
+        left: 1em;
+      }
+
+      [type="checkbox"]:disabled {
+        border-color: lightgray;
+        opacity: 0.7;
+        cursor: not-allowed;
+      }
+
+      [type="checkbox"]:disabled:before {
+        background-color: lightgray;
+      }
+
+      [type="checkbox"]:disabled + span {
+        opacity: 0.7;
+        cursor: not-allowed;
+      }
+
+      [type="checkbox"]:focus-visible {
+        outline-offset: max(2px, 0.1em);
+        outline: max(2px, 0.1em) solid tomato;
+      }
+
+      [type="checkbox"]:enabled:hover {
+        box-shadow: 0 0 0 max(4px, 0.2em) lightgray;
+      }
+
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      .file-display-container {
+        max-width: 900px;
+        margin: 10px auto;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        font-family: 'Segoe UI', system-ui, sans-serif;
+      }
+
+      .platform-section {
+        margin-bottom: 10px;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .platform-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 4px 10px;
+        background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+      }
+
+      .platform-header h2 {
+        margin: 0;
+        font-size: 18px;
+        color: #333;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .version {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 13px;
+        color: #555;
+      }
+
+      .version.missing {
+        background: rgba(255, 0, 0, 0.1);
+        color: #d32f2f;
+        font-weight: bold;
+        border: 1px solid rgba(211, 47, 47, 0.3);
+      }
+
+      .platform-content {
+        padding: 5px;
+        background: white;
+      }
+
+      .platform-content pre {
+        margin: 0;
+        white-space: pre-wrap;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #333;
+      }
+
+      .empty-message {
+        text-align: center;
+        padding: 10px;
+        color: #888;
+        font-size: 16px;
+      }
+
+      .aos .platform-header {
+        background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+      }
+
+      .ios .platform-header {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 로딩 오버레이 추가 -->
+    <div id="loading-overlay" class="loading-overlay">
+      <div class="loading-spinner"></div>
+    </div>
+
+      <label>
+        <input id="activeApp" role="switch" type="checkbox" checked/>
+        <span>활성화</span>
+      </label>
+
+    <div class="container">
+      <h1>크래시리틱 해독기</h1>
+
+
+
+      <div id="file-info" class="file-info">
+        <h2 id="file-name"></h2>
+        <!--    <pre id="file-content"></pre>-->
+        <button id="clear-btn" class="clear-btn">파일 언로드</button>
+      </div>
+
+      <div id="file-input-container">
+        <div class="file-input-container">
+          <label for="file-upload" class="file-upload-btn">파일 선택</label>
+          <input
+            type="file"
+            id="file-upload"
+            accept=".txt,text/plain"
+            multiple
+            style="display: none"
+          />
+
+        <div class="divider">또는</div>
+
+        <div id="drop-zone" class="drop-zone">
+          <p>여기에 NameTransition파일을 드래그하세요</p>
+        </div>
+      </div>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
