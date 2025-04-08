@@ -1,52 +1,20 @@
-// �޸� �����
-const memoryStore = {
-  mappingData: null,
-  fileLoadSuccess: false,
-  fileName: '',
-  isDebugMode: false,
-};
+'use strict';
 
-// �޽��� �ڵ鷯
+// With background scripts you can communicate with popup
+// and contentScript files.
+// For more information on background script,
+// See https://developer.chrome.com/extensions/background_pages
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  switch (request.action) {
-    case 'SET_DATA':
-      memoryStore.mappingData = request.mappingData;
-      memoryStore.fileLoadSuccess = request.fileLoadSuccess;
-      memoryStore.fileName = request.fileName;
-      memoryStore.isDebugMode = request.isDebugMode;
-      sendResponse({ success: true });
-      break;
+  if (request.type === 'GREETINGS') {
+    const message = `Hi ${
+      sender.tab ? 'Con' : 'Pop'
+    }, my name is Bac. I am from Background. It's great to hear from you.`;
 
-    case 'GET_DATA':
-      sendResponse({
-        mappingData: memoryStore.mappingData,
-        fileLoadSuccess: memoryStore.fileLoadSuccess,
-        fileName: memoryStore.fileName,
-        isDebugMode: memoryStore.isDebugMode,
-      });
-      break;
-
-    default:
-      sendResponse({ error: 'Invalid action' });
-  }
-
-  return true; // �񵿱� ���� ����
-});
-
-// ������ ��ȯ �̺�Ʈ ������ �߰�
-
-// background.js
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (
-    changeInfo.url &&
-    tab.active &&
-    tab.url.includes(
-      'console.firebase.google.com/u/0/project/trickcal-revive/crashlytics'
-    )
-  ) {
-    chrome.runtime.sendMessage({
-      action: 'PAGE_NAVIGATED',
-      tabId: tabId,
+    // Log message coming from the `request` parameter
+    console.log(request.payload.message);
+    // Send a response message
+    sendResponse({
+      message,
     });
   }
 });

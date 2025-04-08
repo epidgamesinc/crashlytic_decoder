@@ -3,14 +3,6 @@
 import './style.css';
 
 const pako = require('pako');
-
-let FileLoadSuccess = false;
-let PageLoadSuccess = false;
-let MappingData = null;
-let FileName = '';
-let IsDebugMode = false;
-let TestVal = 1;
-
 // chrome.storage.local.get을 Promise로 래핑
 function getStorageData(key) {
   return new Promise((resolve, reject) => {
@@ -49,32 +41,7 @@ function setStorageData(json) {
   });
 }
 // await 사용 예시
-async function fetchMappingData() {
-  try {
-    const mappingData = await getStorageData('mappingData');
-    console.log(mappingData);
-  } catch (error) {
-    console.error('Error fetching mappingData:', error);
-  }
-}
-
-
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'PAGE_NAVIGATED') {
-    // 현재 활성 탭이 메시지를 보낸 탭과 같은지 확인
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0] && tabs[0].id === request.tabId) {
-        setTimeout(() => {
-          checkForCrashlyticsStack();
-          sendResponse({ success: true }); // 응답 전송 (필요한 경우)
-        }, 2000);
-      }
-    });
-  }
-});
-
-// 기존의 DOMContentLoaded 이벤트 리스너와 나머지 코드...
-
+// popup.js
 document.addEventListener('DOMContentLoaded', async () => {
   const dropZone = document.getElementById('drop-zone');
   const fileUpload = document.getElementById('file-upload');
@@ -84,19 +51,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   const fileContainer = document.getElementById('file-input-container');
   const clearBtn = document.getElementById('clear-btn');
 
-  let { mappingData, fileLoadSuccess, fileName, isDebugMode } =
-    await loadFromMemory();
-  let pageLoadSuccess = false;
-  fileLoadSuccess = mappingData != null;
+  const activeAppCheckbox = document.getElementById('activeApp');
 
-  FileLoadSuccess = fileLoadSuccess;
-  MappingData = mappingData;
-  FileName = fileName;
-  IsDebugMode = isDebugMode;
-
-  console.log('DOM LOADED');
-  console.log(TestVal);
-  //console.log(mappingData, fileLoadSuccess, pageLoadSuccess, fileName, isDebugMode);
+// 이벤트 리스너 추가
+  activeAppCheckbox.addEventListener('change', async function() {
+    // 체크박스의 상태가 변경될 때 실행되는 코드
+    if (activeAppCheckbox.checked) {
+      console.log('활성화됨');
+      await setStorageDataKeyValue("isActive", true);
+      sendRefreshMessage();
+    } else {
+      console.log('비활성화됨');
+      setStorageDataKeyValue("isActive", false);
+    }
+  });
 
   fileUpload.addEventListener('change', handleFileSelect);
 
@@ -108,65 +76,69 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await init();
 
-  async function saveToMemory(cb) {
-    return new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        {
-          action: 'SET_DATA',
-          ...{
-            mappingData: mappingData,
-            loadSuccess: pageLoadSuccess,
-            fileName: fileNameElement.textContent,
-            isDebugMode: isDebugMode,
-          },
-        },
-        (response) => {
-          resolve(response?.success ?? false);
-          if (cb != null) cb();
-        }
-      );
-    });
-  }
-
-  // 데이터 불러오기
-  async function loadFromMemory(cb) {
-    return new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        {
-          action: 'GET_DATA',
-        },
-        (response) => {
-          resolve(response || {});
-          if (cb != null) cb();
-        }
-      );
-    });
-  }
-
   async function init() {
     showLoading(); // 로딩 시작
 
-    pageLoadSuccess = await checkPage(
-      fileNameElement?.textContent == null || fileNameElement?.textContent != ''
-        ? fileNameElement?.textContent
-        : fileName
-    ); // 파일명 전달
-    PageLoadSuccess = pageLoadSuccess;
-    checkForCrashlyticsStack();
-
-    //console.log("await loadsuccess " + pageLoadSuccess);
-    displayFile(
-      fileNameElement?.textContent == null || fileNameElement?.textContent != ''
-        ? fileNameElement?.textContent
-        : fileName,
-      mappingData != null ? JSON.stringify(mappingData) : ''
-    );
-    await saveToMemory();
+    await setActiveToggleStatus();
+    clearBtn.style.display = 'none';
+    let data = await fetchMappingData();
+    displayFile(data);
 
     hideLoading();
 
     showHUD(); // HUD 표시 추가
+
   }
+
+  async function setActiveToggleStatus(){
+    let res = await getStorageData("isActive");
+    if(res == null){
+      activeAppCheckbox.checked = true;
+      setStorageDataKeyValue("isActive", true);
+      return true;
+    }
+
+    activeAppCheckbox.checked = res;
+
+    return res;
+  }
+
+  function sendRefreshMessage(){
+    chrome.tabs.query({active: true, currentWindow: true}, function(tabs){
+      chrome.tabs.sendMessage(tabs[0].id, {action: "refreshPage"}, function(response) {});
+    });
+  }
+  async function fetchMappingData() {
+    try {
+      const aosMappingData = await getStorageData('aos');
+      const iosMappingData = await getStorageData('ios');
+
+      if (
+        aosMappingData != null &&
+        aosMappingData.mappingData != null &&
+        aosMappingData.version != null
+      ) {
+        aosMappingData.mappingData = partialDecode(aosMappingData.mappingData);
+      }
+
+      if (
+        iosMappingData != null &&
+        iosMappingData.mappingData != null &&
+        iosMappingData.version != null
+      ) {
+        iosMappingData.mappingData = partialDecode(iosMappingData.mappingData);
+      }
+
+      return {
+        aos: aosMappingData,
+        ios: iosMappingData,
+      };
+    } catch (error) {
+      console.error('Error fetching mappingData:', error);
+      return null;
+    }
+  }
+
 
   function showHUD() {
     const hudContainer = document.createElement('div');
@@ -177,16 +149,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     hudContainer.style.textAlign = 'center';
     hudContainer.style.fontWeight = 'bold';
 
-    if (pageLoadSuccess && fileLoadSuccess) {
-      hudContainer.textContent = '해독이 정상적으로 적용중입니다';
-      hudContainer.style.backgroundColor = '#e6f7e6';
-      hudContainer.style.color = '#2e7d32';
-    } else {
-      hudContainer.textContent =
-        '파일이 없거나 잘못된 파일(앱버전, os 불일치), 혹은 잘못된 페이지입니다.';
-      hudContainer.style.backgroundColor = '#ffebee';
-      hudContainer.style.color = '#c62828';
-    }
 
     // 기존 HUD 제거
     const existingHud = document.getElementById('hud-container');
@@ -239,9 +201,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     handleFiles(files);
   }
 
-  function handleFiles(files) {
+  async function handleFiles(files) {
     if (files.length > 0) {
-        readFile(files);
+        await readFile(files);
+        init();
+      sendRefreshMessage();
     }
   }
   async function readFile(files) {
@@ -277,19 +241,12 @@ document.addEventListener('DOMContentLoaded', async () => {
               aosHighestVersion = fileInfo.version;
             }
 
-            console.log("try read " + file.name);
-
             const reader = new FileReader();
 
             reader.onload = async (e) => {
               try {
                 const content = e.target.result;
-                processMappingData(fileInfo, content);
-                pageLoadSuccess = await checkPage(file.name); // 파일명 전달
-                PageLoadSuccess = pageLoadSuccess;
-                displayFile(file.name, content);
-                checkForCrashlyticsStack();
-                await saveToMemory();
+                await processMappingData(fileInfo, content);
                 resolve(); // 파일 처리 완료
               } catch (error) {
                 reject(error);
@@ -331,11 +288,50 @@ document.addEventListener('DOMContentLoaded', async () => {
     overlay.style.display = 'none';
   }
 
-  function displayFile(name, content) {
-    fileNameElement.textContent = `${name}`;
-    // fileContent.textContent = content;
-    fileInfo.style.display = fileLoadSuccess ? 'block' : 'none';
-    fileContainer.style.display = fileLoadSuccess ? 'none' : 'block';
+  function displayFile(data) {
+    // 기존 표시 영역 정리
+    const container = document.getElementById('file-display-container') || createDisplayContainer();
+
+    // 컨테이너 스타일 초기화
+    container.innerHTML = '';
+    container.style.display = 'block';
+
+    const titleMsg = document.createElement('div');
+    titleMsg.className = 'empty-message';
+    titleMsg.textContent = '업로드된 NameTransition 텍스트 파일 상태';
+    container.appendChild(titleMsg);
+
+    const fileExist = data != null && (!!data['aos'] || !!data['ios']);
+    clearBtn.style.display = fileExist ? 'block' : 'none';
+    // AOS 데이터 표시
+    createPlatformSection(container, 'aos', 'Android', data != null && data['aos'] ? data['aos'].version : null);
+    createPlatformSection(container, 'ios', 'iOS',data != null && data['ios'] ? data['ios'].version : null);
+  }
+
+// 표시 컨테이너 생성 함수
+  function createDisplayContainer() {
+    const container = document.createElement('div');
+    container.id = 'file-display-container';
+    container.className = 'file-display-container';
+    fileInfo.appendChild(container);
+    return container;
+  }
+
+// 플랫폼별 섹션 생성 함수
+  function createPlatformSection(container, platformId, title, version) {
+    const section = document.createElement('div');
+    section.className = `platform-section ${platformId}`;
+
+    // 헤더 생성
+    const header = document.createElement('div');
+    header.className = 'platform-header';
+    header.innerHTML = `<h2>${title}</h2>
+  <span class="version ${!version ? 'missing' : ''}">
+    ${version ? `v${version}` : '파일 없음'}
+  </span>`;
+    section.appendChild(header);
+
+    container.appendChild(section);
   }
 
   function displayError(message) {
@@ -345,32 +341,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   async function clearFile() {
-    fileNameElement.textContent = '';
-    // fileContent.textContent = '';
-    fileContainer.style.display = 'block';
-    fileInfo.style.display = 'none';
-    fileUpload.value = '';
-    fileName = '';
-    fileLoadSuccess = false;
-    FileLoadSuccess = fileLoadSuccess;
-    mappingData = null;
-    saveToMemory();
-    // chrome.storage.local.remove(['savedFileName', 'savedFileContent']);
-    await checkPage(
-      fileNameElement?.textContent == null || fileNameElement?.textContent != ''
-        ? fileNameElement?.textContent
-        : fileName
-    ); // 파일명 전달
-    checkForCrashlyticsStack();
-    displayFile('', '');
+    let json = {
+      'aos':null,
+      'ios':null
+    };
+    await setStorageData(json);
+
+    displayFile(json);
     showHUD(); // HUD 표시 추가
+
+    sendRefreshMessage();
+
   }
 
   function processMappingData(fileInfo, content) {
     try {
-      mappingData = JSON.parse(content);
-      fileLoadSuccess = true;
-      FileLoadSuccess = fileLoadSuccess;
+      JSON.parse(content);
 
       var encoded = partialEncode(content);
 
@@ -387,12 +373,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           }});
       }
       chrome.storage.local.set({ mappingData: encoded });
-
-      console.log("DECODE");
-      console.log(partialDecode(encoded));
     } catch (e) {
       console.error('매핑 데이터 파싱 실패:', e);
-      mappingData = null;
     }
   }
 
@@ -454,385 +436,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  async function checkPage(fileName = '') {
-    return new Promise((resolve) => {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        chrome.scripting.executeScript(
-          {
-            target: { tabId: tabs[0].id },
-            func: (fileName) => {
-              // 1. 기존 상태 바 제거
-              const existingStatusBar =
-                document.querySelector('.custom-status-bar');
-              if (existingStatusBar) existingStatusBar.remove();
+  const parseFileName = (fileName) => {
+    if (!fileName) return { store: '', version: '' };
 
-              // 2. 버전 정보 추출
-              const versionElement = document.querySelector(
-                '.session-build-version .header-item-text'
-              );
-              let version = '';
-              if (versionElement) {
-                const versionMatch = versionElement.textContent
-                  .trim()
-                  .match(/\d+/);
-                version = versionMatch ? versionMatch[0] : '';
-              }
-
-              // 3. OS 정보 추출
-              const osIcon = document.querySelector(
-                '.session-os .platform-icon'
-              );
-              let os = 'unknown';
-              if (osIcon) {
-                const osName = (osIcon?.innerHTML ?? '') + '';
-                os = osName.includes('plat_android')
-                  ? 'Android'
-                  : osName.includes('plat_ios')
-                  ? 'iOS'
-                  : 'unknown';
-              }
-
-
-
-              //console.log("파일명: " + fileName);
-              const fileData = parseFileName(fileName);
-
-              // 5. 검증 로직
-              const isVersionMatch =
-                version && fileData.version && version === fileData.version;
-              const isOSMatch =
-                os !== 'unknown' && fileData.store && os === fileData.store;
-              const isValid =
-                fileName != null && isVersionMatch == true && isOSMatch == true;
-              //console.log("isValid => " + isValid);
-
-              // 6. 상태 바 생성
-              const statusBar = document.createElement('div');
-              statusBar.className = 'custom-status-bar';
-              Object.assign(statusBar.style, {
-                padding: '8px 16px',
-                backgroundColor: '#f5f5f5',
-                borderBottom: '1px solid #ddd',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: '14px',
-              });
-
-              // 7. 페이지 정보 표시
-              const pageInfo = document.createElement('div');
-              pageInfo.textContent = `App Version: ${version} | OS: ${os}`;
-
-              // 8. 파일 정보 표시
-              const fileInfo = document.createElement('div');
-              fileInfo.textContent = fileName
-                ? `File: ${fileName}${
-                    fileData.store ? ` | Store: ${fileData.store}` : ''
-                  }${fileData.version ? ` | Ver: ${fileData.version}` : ''}`
-                : 'No file loaded';
-
-              // 9. 상태 표시기 추가
-              const statusIndicator = document.createElement('span');
-              statusIndicator.style.marginLeft = '10px';
-              statusIndicator.style.fontWeight = 'bold';
-              statusIndicator.textContent = isValid ? '로드 성공' : '로드 실패';
-              statusIndicator.style.color = isValid ? '#4285f4' : '#ea4335';
-
-              //console.log("loadSuccess 할당");
-              pageLoadSuccess = isValid;
-              PageLoadSuccess = isValid;
-
-              fileInfo.appendChild(statusIndicator);
-
-              statusBar.appendChild(pageInfo);
-              statusBar.appendChild(fileInfo);
-
-              // 10. 헤더에 상태 바 추가
-              const header = document.querySelector('.session-card-header');
-              if (header) header.prepend(statusBar);
-
-              // 디버깅 로그
-              //console.log('Validation:', {
-              //     appVersion: version,
-              //     fileVersion: fileData.version,
-              //     os: os,
-              //     store: fileData.store,
-              //     isValid: isValid
-              // });
-
-              return isValid; // 이 값을 resolve로 전달
-            },
-            args: [fileName.replace('파일 이름: ', '')],
-          },
-          (results) => {
-            // executeScript의 콜백에서 결과 처리
-            const isValid = results?.[0]?.result ?? false;
-            //console.log("Resolve " + isValid);
-            resolve(isValid);
-          }
-        );
-      });
-    });
-  }
-});
-
-function checkForCrashlyticsStack() {
-  console.log('checkForCrashlyticsStack');
-  if (FileLoadSuccess == false) {
-    return;
-  }
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    chrome.scripting.executeScript({
-      target: { tabId: tabs[0].id },
-      func: (mappingData) => {
-        if (mappingData == null) {
-          //console.log("맵핑 데이터 없어서 리턴");
-          return;
-        }
-
-        // 매핑 데이터 파싱
-        let parsedMapping = null;
-        try {
-          parsedMapping = JSON.parse(mappingData);
-          if (parsedMapping?.MemberTyp_Mapping?.Method?.Mapping == null) {
-            //console.log("맵핑 데이터 없어서 리턴2");
-            return;
-          }
-        } catch (e) {
-          console.error('매핑 데이터 파싱 실패:', e);
-          return;
-        }
-
-        const osIcon = document.querySelector('.session-os .platform-icon');
-        const isiOS = osIcon?.innerHTML.includes('plat_ios');
-
-        function parseAndroidStack(frame) {
-          const contextDiv = frame.querySelector('.context-cell > div');
-          if (!contextDiv) return null;
-
-          const text = contextDiv.textContent.trim();
-          const lastParenIndex = text.lastIndexOf('(');
-
-          // 1. className 추출: 마지막 ( ~ ) 사이 내용에서 + 앞부분
-          const className = extractClassName(text);
-
-          // 2. methodName 추출
-          let methodName = '';
-          if (text.includes('+')) {
-            // +가 있는 경우: + ~ ( 사이
-            const plusIndex = text.indexOf('+');
-            methodName = text.slice(plusIndex + 1, lastParenIndex).trim();
-          } else {
-            // +가 없는 경우: 마지막 . ~ ( 사이
-            const lastDotIndex = text.lastIndexOf('.', lastParenIndex);
-            methodName = text.slice(lastDotIndex + 1, lastParenIndex).trim();
-          }
-
-          return { methodName, className };
-        }
-
-        // className 추출 헬퍼 함수
-        function extractClassName(text) {
-          const betweenParen = text
-            .slice(text.lastIndexOf('(') + 1, text.lastIndexOf(')'))
-            .trim();
-          return betweenParen.split('+')[0]; // +가 없으면 전체 반환
-        }
-
-        function parseiOSStack(frame) {
-          const symbolDiv = frame.querySelector('.frame-symbol');
-          const fileLine = frame.querySelector('.frame-file-line span');
-
-          console.log('sym ' + symbolDiv?.textContent);
-          console.log('fileLine ' + fileLine?.textContent);
-          let className = fileLine?.textContent.trim();
-          let methodName = symbolDiv?.textContent.trim();
-
-          if (className.includes('+')) {
-            methodName += '.' + className.split('+')[1].trim();
-            className = className.split('+')[0].trim();
-          }
-
-          return {
-            methodName: methodName,
-            className: className,
-          };
-        }
-
-        // DOM 조작
-        document.querySelectorAll('c9s-stack-frame').forEach((frame) => {
-          const contextDiv = frame.querySelector('.context-cell > div');
-          if (!contextDiv) return;
-
-          const { methodName, className } = isiOS
-            ? parseiOSStack(frame)
-            : parseAndroidStack(frame);
-
-          if (!methodName || !className) return;
-
-          // 변환된 텍스트 찾기
-          let translatedText = '';
-          if (parsedMapping) {
-            methodName.split('.').forEach((methodName) => {
-              var exist = false;
-              console.log('TARGET : M' + methodName + ' / ' + className);
-
-              for (const [key, value] of Object.entries(
-                parsedMapping.MemberTyp_Mapping.Method.Mapping
-              )) {
-                if (value === methodName && key.includes(className)) {
-                  translatedText += key + '\n';
-                  exist = true;
-                  break;
-                }
-              }
-
-              if (exist == false) {
-                for (const [key, value] of Object.entries(
-                  parsedMapping.MemberTyp_Mapping.Event.Mapping
-                )) {
-                  if (value === methodName && key.includes(className)) {
-                    translatedText += key + '\n';
-                    exist = true;
-                    break;
-                  }
-                }
-              }
-
-              if (exist == false) {
-                for (const [key, value] of Object.entries(
-                  parsedMapping.MemberTyp_Mapping.Type.Mapping
-                )) {
-                  if (value === methodName && key.includes(className)) {
-                    translatedText += key + '\n';
-                    exist = true;
-                    break;
-                  }
-                }
-              }
-
-              if (exist == false) {
-                for (const [key, value] of Object.entries(
-                  parsedMapping.MemberTyp_Mapping.Field.Mapping
-                )) {
-                  if (value === methodName && key.includes(className)) {
-                    translatedText += key + '\n';
-                    exist = true;
-                    break;
-                  }
-                }
-              }
-
-              if (exist == false) {
-                for (const [key, value] of Object.entries(
-                  parsedMapping.MemberTyp_Mapping.Property.Mapping
-                )) {
-                  if (value === methodName && key.includes(className)) {
-                    translatedText += key + '\n';
-                    exist = true;
-                    break;
-                  }
-                }
-              }
-            });
-
-            if (translatedText == '') {
-              for (const [key, value] of Object.entries(
-                parsedMapping.MemberTyp_Mapping.Method.Mapping
-              )) {
-                if (value === methodName) {
-                  translatedText += key + '\n';
-                }
-              }
-
-              for (const [key, value] of Object.entries(
-                parsedMapping.MemberTyp_Mapping.Event.Mapping
-              )) {
-                if (value === methodName) {
-                  translatedText += key + '\n';
-                }
-              }
-
-              for (const [key, value] of Object.entries(
-                parsedMapping.MemberTyp_Mapping.Type.Mapping
-              )) {
-                if (value === methodName) {
-                  translatedText += key + '\n';
-                }
-              }
-              for (const [key, value] of Object.entries(
-                parsedMapping.MemberTyp_Mapping.Field.Mapping
-              )) {
-                if (value === methodName) {
-                  translatedText += key + '\n';
-                }
-              }
-
-              for (const [key, value] of Object.entries(
-                parsedMapping.MemberTyp_Mapping.Property.Mapping
-              )) {
-                if (value === methodName) {
-                  translatedText += key + '\n';
-                }
-              }
-              if (translatedText == '') {
-                translatedText = 'Not Found';
-              }
-            }
-          }
-
-          let div = frame.querySelector('.context-cell');
-          // 기존 변환 결과 제거 또는 업데이트
-          let translationSpan = div.querySelector('.translated-message');
-          if (!translationSpan) {
-            translationSpan = document.createElement('div');
-            translationSpan.className = 'translated-message';
-            div.appendChild(document.createElement('br'));
-            div.appendChild(translationSpan);
-          } else {
-          }
-
-          // 내용 업데이트 (덮어쓰기)
-          translationSpan.textContent = `Translated => ${translatedText}`;
-          if (translationSpan) {
-            translationSpan.innerHTML = translationSpan.textContent
-              .replaceAll(/</g, '&lt;')
-              .replaceAll(/>/g, '&gt;')
-              .replaceAll(/\n/g, '<br>');
-          }
-          //console.log(parsedMapping);
-          // if(loadSuccess == false){
-          //     translationSpan.textContent = '로드 실패';
-          // }
-        });
-      },
-      args: [MappingData ? JSON.stringify(MappingData) : '{}'],
-    });
-  });
-}
-
-// 4. 파일명 파싱
-const parseFileName = (fileName) => {
-  if (!fileName) return { store: '', version: '' };
-
-  let store = fileName.includes('GooglePlayStore')
-    ? 'Android'
-    : fileName.includes('AppleAppStore')
-      ? 'iOS'
-      : '';
-
-  let fileVersion = '';
-  const versionMatch = fileName.match(/Ver (\d+\.\d+\.\d+)/);
-  if (versionMatch) {
-    const parts = versionMatch[1].split('.');
-    fileVersion =
-      parts.length === 3
-        ? `${parts[0]}${parts[1].padStart(
-          2,
-          '0'
-        )}${parts[2].padStart(2, '0')}`
+    let store = fileName.includes('GooglePlayStore')
+      ? 'Android'
+      : fileName.includes('AppleAppStore')
+        ? 'iOS'
         : '';
-  }
 
-  return { store, version: fileVersion };
-};
+    let fileVersion = '';
+    const versionMatch = fileName.match(/Ver (\d+\.\d+\.\d+)/);
+    if (versionMatch) {
+      const parts = versionMatch[1].split('.');
+      fileVersion =
+        parts.length === 3
+          ? `${parts[0]}${parts[1].padStart(
+            2,
+            '0'
+          )}${parts[2].padStart(2, '0')}`
+          : '';
+    }
+
+    return { store, version: fileVersion };
+  };
+
+});

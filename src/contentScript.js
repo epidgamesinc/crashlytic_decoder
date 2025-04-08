@@ -1,4 +1,16 @@
+'use strict';
 // DOM 변경 감지 옵저버
+// contentScript.js
+// contentScript.js
+
+// Communicate with background file by sending a message
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if(message.action === "refreshPage"){
+    lastUrl = null;
+    processPage();
+  }
+  return true;
+});
 
 const pako = require('pako');
 
@@ -12,6 +24,11 @@ let processing = false;
 async function processPage() {
 
   if(processing){
+    return;
+  }
+  const isActive = await getStorageData("isActive");
+
+  if(isActive == false){
     return;
   }
 
@@ -296,7 +313,6 @@ async function getCurrentPageOSVersion() {
 
 async function processNewElements(pageVersion, mappingData) {
   mappingData = mappingData[pageVersion.os].mappingData;
-  console.log("processed mappingData ",mappingData);
   if (
     document.querySelectorAll('.caption-table-cell.ng-star-inserted').length > 0
   ) {
