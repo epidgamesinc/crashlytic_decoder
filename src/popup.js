@@ -24,6 +24,30 @@ function getStorageData(key) {
   });
 }
 
+
+function setStorageDataKeyValue(key, value) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ [key]: value }, () => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);  // 실패 시 Error 객체 reject
+      } else {
+        resolve(true);  // 성공 시 true resolve
+      }
+    });
+  });
+}
+
+function setStorageData(json) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(json, () => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError); // 에러 발생 시 reject
+      } else {
+        resolve('success'); // 성공 시 resolve
+      }
+    });
+  });
+}
 // await 사용 예시
 async function fetchMappingData() {
   try {
@@ -217,41 +241,82 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function handleFiles(files) {
     if (files.length > 0) {
-      const file = files[0];
-
-      if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-        readFile(file);
-      } else {
-        displayError('텍스트 파일(.txt)만 지원합니다.');
-      }
+        readFile(files);
     }
   }
-
-  async function readFile(file) {
-    const reader = new FileReader();
-
-    reader.onload = async (e) => {
+  async function readFile(files) {
+    try {
       showLoading();
 
-      const content = e.target.result;
-      processMappingData(content);
-      pageLoadSuccess = await checkPage(file.name); // 파일명 전달
-      PageLoadSuccess = pageLoadSuccess;
-      displayFile(file.name, content);
-      checkForCrashlyticsStack();
-      //console.log("로드완료")
+      let iosHighestVersion = -1;
+      let aosHighestVersion = -1;
 
-      await saveToMemory();
+      // 모든 파일 처리 프로미스 생성
+      const fileProcessingPromises = Array.from(files).map(file => {
+        return new Promise((resolve, reject) => {
+          if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+
+            if(file.name.includes('NameTransition') === false || file.name.includes('Production') === false){
+              resolve();
+              return;
+            }
+
+            let fileInfo = parseFileName(file.name);
+            if(fileInfo.store === 'iOS'){
+              if(iosHighestVersion >= fileInfo.version){
+                resolve();
+                return;
+              }
+              iosHighestVersion = fileInfo.version;
+            }
+            else if(fileInfo.store === 'Android'){
+              if(aosHighestVersion >= fileInfo.version){
+                resolve();
+                return;
+              }
+              aosHighestVersion = fileInfo.version;
+            }
+
+            console.log("try read " + file.name);
+
+            const reader = new FileReader();
+
+            reader.onload = async (e) => {
+              try {
+                const content = e.target.result;
+                processMappingData(fileInfo, content);
+                pageLoadSuccess = await checkPage(file.name); // 파일명 전달
+                PageLoadSuccess = pageLoadSuccess;
+                displayFile(file.name, content);
+                checkForCrashlyticsStack();
+                await saveToMemory();
+                resolve(); // 파일 처리 완료
+              } catch (error) {
+                reject(error);
+              }
+            };
+
+            reader.onerror = () => {
+              reject(new Error('파일을 읽는 중 오류가 발생했습니다.'));
+            };
+
+            reader.readAsText(file);
+          } else {
+            resolve(); // 텍스트 파일이 아니면 건너뜀
+          }
+        });
+      });
+
+      // 모든 파일 처리 완료 대기
+      await Promise.all(fileProcessingPromises);
 
       hideLoading();
       showHUD(); // HUD 표시 추가
-    };
-
-    reader.onerror = () => {
-      displayError('파일을 읽는 중 오류가 발생했습니다.');
-    };
-
-    reader.readAsText(file);
+      //console.log("모든 파일 로드 완료");
+    } catch (error) {
+      hideLoading();
+      displayError(error.message);
+    }
   }
 
   // 로딩 표시 함수
@@ -301,7 +366,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     showHUD(); // HUD 표시 추가
   }
 
-  function processMappingData(content) {
+  function processMappingData(fileInfo, content) {
     try {
       mappingData = JSON.parse(content);
       fileLoadSuccess = true;
@@ -309,6 +374,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       var encoded = partialEncode(content);
 
+      if(fileInfo.store === 'Android'){
+        setStorageData({aos:{
+            version:fileInfo.version,
+            mappingData:encoded
+          }});
+      }
+      else {
+        setStorageData({ios:{
+            version:fileInfo.version,
+            mappingData:encoded
+          }});
+      }
       chrome.storage.local.set({ mappingData: encoded });
 
       console.log("DECODE");
@@ -415,31 +492,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                   : 'unknown';
               }
 
-              // 4. 파일명 파싱
-              const parseFileName = (fileName) => {
-                if (!fileName) return { store: '', version: '' };
 
-                let store = fileName.includes('GooglePlayStore')
-                  ? 'Android'
-                  : fileName.includes('AppleAppStore')
-                  ? 'iOS'
-                  : '';
-
-                let fileVersion = '';
-                const versionMatch = fileName.match(/Ver (\d+\.\d+\.\d+)/);
-                if (versionMatch) {
-                  const parts = versionMatch[1].split('.');
-                  fileVersion =
-                    parts.length === 3
-                      ? `${parts[0]}${parts[1].padStart(
-                          2,
-                          '0'
-                        )}${parts[2].padStart(2, '0')}`
-                      : '';
-                }
-
-                return { store, version: fileVersion };
-              };
 
               //console.log("파일명: " + fileName);
               const fileData = parseFileName(fileName);
@@ -757,3 +810,29 @@ function checkForCrashlyticsStack() {
     });
   });
 }
+
+// 4. 파일명 파싱
+const parseFileName = (fileName) => {
+  if (!fileName) return { store: '', version: '' };
+
+  let store = fileName.includes('GooglePlayStore')
+    ? 'Android'
+    : fileName.includes('AppleAppStore')
+      ? 'iOS'
+      : '';
+
+  let fileVersion = '';
+  const versionMatch = fileName.match(/Ver (\d+\.\d+\.\d+)/);
+  if (versionMatch) {
+    const parts = versionMatch[1].split('.');
+    fileVersion =
+      parts.length === 3
+        ? `${parts[0]}${parts[1].padStart(
+          2,
+          '0'
+        )}${parts[2].padStart(2, '0')}`
+        : '';
+  }
+
+  return { store, version: fileVersion };
+};
