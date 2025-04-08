@@ -2,63 +2,144 @@
 
 const pako = require('pako');
 
-let lastUrl = window.location.href;
+let lastUrl = null;
 let ajaxComplete = true;
 let activeAjaxCount = 0;
 
 const observer = new MutationObserver(async () => {
+  await processPage();
+});
+
+async function processPage() {
+  if(window.location.href.includes("trickcal-revive/crashlytics/app") === false){
+    return;
+  }
+
   if (window.location.href !== lastUrl) {
     lastUrl = window.location.href;
     console.log('URL changed to:', lastUrl);
-
-
-    // AJAX 완료까지 대기
     await waitForAjaxComplete();
 
-    // URL 변경 시 실행할 코드
+    console.log('ajax complete');
+
     let data = await fetchMappingData();
-    console.log(data);
-
     let json = partialDecode(data);
-    console.log(json);
 
-
-    // 필요한 경우 DOM 처리
-    processNewElements([document.body], json);
+    await processNewElements(json);
   }
-});
+}
 
-async function processNewElements(nodes, mappingData) {
+async function processNewElements(mappingData) {
+  if (document.querySelectorAll('.caption-table-cell.ng-star-inserted').length > 0) {
+    console.log("summarize recognized");
+    await processSummarizeElement(mappingData);
+  }
 
+  if (document.querySelectorAll('.gmp-icons.platform-icon.ng-star-inserted').length > 0 && document.querySelectorAll('.gmp-icons.platform-icon.ng-star-inserted')[0].innerHTML.includes("ios")) {
+    console.log("ios recognized");
 
-  nodes.forEach(node => {
-    if (node.nodeType === Node.ELEMENT_NODE) {
-      // 여기에 요소 처리 로직 추가
-      transformElements( mappingData);
+    await processIOSElement(mappingData);
+  }
 
-      // 자식 요소도 검사
-      if (node.querySelectorAll) {
-        transformElements( mappingData);
-      }
+  if (document.querySelectorAll('.gmp-icons.platform-icon.ng-star-inserted').length > 0 && document.querySelectorAll('.gmp-icons.platform-icon.ng-star-inserted')[0].innerHTML.includes("android")) {
+    console.log("android recognized");
+
+    await processAOSElement(mappingData);
+  }
+}
+
+async function processSummarizeElement(parsedMapping) {
+  const cells = document.querySelectorAll('.caption-table-cell.ng-star-inserted');
+  // 각 요소에 스타일 적용
+  cells.forEach(cell => {
+    const wrappers = cell.querySelector('[data-test-id="blamedFileWrapper"]');
+    if (wrappers != null) {
+      const target = wrappers.querySelector('.copy-target');
+
+      var className = extractClassNameFromTitle(target.textContent);
+      var methodName = extractMethodName(target.textContent, cell.querySelector('.title-wrapper > .copy-target').textContent);
+
+      var translated = '';
+      methodName.split('.').forEach((methodName) => {
+        translated += getTranslated(methodName, className, parsedMapping);
+
+      });
+
+      addTranslatedMessage(cell.querySelector('.title-wrapper'), translated);
+
     }
+
   });
 }
 
+async function processAOSElement(parsedMapping) {
+  const cells = document.querySelectorAll('.c9s-stack-frame');
+  // 각 요소에 스타일 적용
+  cells.forEach(cell => {
+    const wrappers = cell.querySelector('.context-cell > div');
+    if (wrappers != null) {
+      const {
+        className,
+        methodName,
+      } = parseAndroidStack(wrappers.textContent.trim());
+
+      var translated = '';
+      methodName.split('.').forEach((methodName) => {
+        translated += getTranslated(methodName, className, parsedMapping);
+
+      });
+
+      addTranslatedMessage(wrappers, translated);
+
+    }
+
+  });
+}
+
+async function processIOSElement(parsedMapping) {
+  const cells = document.querySelectorAll('.stack-frame.native-frame.developer-code.ng-star-inserted');
+  // 각 요소에 스타일 적용
+  cells.forEach(cell => {
+    const symbolDiv = cell.querySelector('.frame-symbol');
+    const fileLine = cell.querySelector('.frame-file-line span');
+
+    let {
+      className,
+      methodName,
+    } = parseiOSStack(fileLine?.textContent.trim(), symbolDiv?.textContent.trim());
+
+    console.log(className, methodName);
+    var translated = '';
+    methodName.split('.').forEach((methodName) => {
+      translated += getTranslated(methodName, className, parsedMapping);
+
+      console.log(translated);
+    });
+
+    addTranslatedMessage(symbolDiv, translated);
+  });
+}
 
 function waitForAjaxComplete() {
+  console.log('wait for ajax');
   return new Promise((resolve) => {
     const interval = setInterval(() => {
       // 지정된 요소가 존재하는지 확인
-      const elements = document.querySelectorAll('.caption-table-cell.ng-star-inserted');
-
-      if (elements.length > 0) {
+      if (document.querySelectorAll('.caption-table-cell.ng-star-inserted').length > 0) {
         clearInterval(interval);  // 요소가 나타났으면 interval 멈추기
-        console.log('요소가 나타났습니다:', elements);
-
-        // 원하는 작업을 추가하세요
-        resolve();  // 요소가 나타났으면 Promise 해결
+        resolve();
       }
-    }, 100);  // 100ms마다 체크
+
+      if (document.querySelectorAll('.library-cell.ng-star-inserted').length > 0) {
+        clearInterval(interval);  // 요소가 나타났으면 interval 멈추기
+        resolve();
+      }
+
+      if (document.querySelectorAll('.stack-frame.ng-star-inserted').length > 0) {
+        clearInterval(interval);  // 요소가 나타났으면 interval 멈추기
+        resolve();
+      }
+    }, 500);
   });
 }
 
@@ -66,7 +147,7 @@ function waitForAjaxComplete() {
 observer.observe(document, {
   subtree: true,
   childList: true,
-  attributes: true
+  attributes: true,
 });
 
 
@@ -96,17 +177,17 @@ async function fetchMappingData() {
 
 
 // 페이지 로드 시 초기 처리
-window.addEventListener('load', () => {
-  initElementProcessing();
+window.addEventListener('load', async () => {
+  await processPage();
   startObserving();
 });
 
-// history API 변경 감지 (SPA 대응)
-window.addEventListener('popstate', () => {
-  setTimeout(initElementProcessing, 300); // SPA 라우팅 후 DOM 업데이트 대기
-});
-
-// 요소 처리 함수
+// // history API 변경 감지 (SPA 대응)
+// window.addEventListener('popstate', () => {
+//   // setTimeout(initElementProcessing, 300); // SPA 라우팅 후 DOM 업데이트 대기
+// });
+//
+// // 요소 처리 함수
 
 function partialEncode(content) {
   var compressed = pako.gzip(content);
@@ -166,55 +247,39 @@ function partialDecode(encodedString, originalChunkSize = 1020) {
   }
 }
 
-// 요소 변형 함수
-async function transformElements(parsedMapping) {
-  // 특정 요소 찾기 (예: 모든 <a> 태그)
-  const cells = document.querySelectorAll('.caption-table-cell.ng-star-inserted');
-  // 각 요소에 스타일 적용
-  cells.forEach(cell => {
-    const wrappers = cell.querySelector('[data-test-id="blamedFileWrapper"]');
-    if(wrappers != null){
-      const target = wrappers.querySelector('.copy-target');
+function extractMethodName(fullClassName, methodName) {
+  if (fullClassName.includes('+')) {
+    return fullClassName.split('+')[1];
+  }
 
-      var className = target.textContent;
-      var methodName = cell.querySelector('.title-wrapper > .copy-target').textContent;
-
-      methodName = extractAfterPlusOrDot(methodName);
-
-      var translated = '';
-      methodName.split('.').forEach((methodName)=>{
-        translated += getTranslated(methodName, className, parsedMapping);
-
-      });
-
-      addTranslatedMessage(cell, translated);
-
-    }
-
-  });
-
+  return extractAfterPlusOrDot(methodName);
 }
 
+function extractClassNameFromTitle(str) {
+  if (str.includes('+')) {
+    return str.split('+')[0];
+  }
+
+  return str;
+}
 
 function addTranslatedMessage(wrappers, msg) {
-  // 모든 title-wrapper 요소 찾기
-  const titleWrapper = wrappers.querySelector('.title-wrapper');
 
-    // 기존 translated-message 제거
-    const existingMessage = titleWrapper.querySelector('.translated-message');
-    if (existingMessage) {
-      existingMessage.remove();
-    }
+  // 기존 translated-message 제거
+  const existingMessage = wrappers.querySelector('.translated-message');
+  if (existingMessage) {
+    existingMessage.remove();
+  }
 
-    // 새로운 translated-message 생성
-    const translatedDiv = document.createElement('div');
-    translatedDiv.className = 'translated-message';
-    translatedDiv.innerHTML = '<strong>Translated => '+msg+'</strong>';
-    translatedDiv.style.marginTop = '5px';
-    translatedDiv.style.fontWeight = 'bold';
+  // 새로운 translated-message 생성
+  const translatedDiv = document.createElement('div');
+  translatedDiv.className = 'translated-message';
+  translatedDiv.innerHTML = '<strong>Translated => ' + msg + '</strong>';
+  translatedDiv.style.marginTop = '5px';
+  translatedDiv.style.fontWeight = 'bold';
 
-    // title-wrapper 바로 다음에 삽입
-    titleWrapper.insertAdjacentElement('afterend', translatedDiv);
+  // title-wrapper 바로 다음에 삽입
+  wrappers.insertAdjacentElement('afterend', translatedDiv);
 
 }
 
@@ -229,6 +294,7 @@ function extractAfterPlusOrDot(str) {
     return str.slice(lastDotIndex + 1);
   }
 }
+
 function parseAndroidStack(text) {
   const lastParenIndex = text.lastIndexOf('(');
 
@@ -273,70 +339,12 @@ function parseiOSStack(title, subtitle) {
   };
 }
 
-function checkExternalCell(cell, parsedMapping) {
-  if (parsedMapping == null || cell == null)
-    return;
-
-
-  const osIcon = document.querySelector('.session-os .platform-icon');
-  const isiOS = osIcon?.innerHTML.includes('plat_ios');
-
-
-// DOM 조작
-  const { methodName, className } = isiOS
-    ? parseiOSStack(frame)
-    : parseAndroidStack(frame);
-
-  if (!methodName || !className) return;
-
-  // 변환된 텍스트 찾기
-  let translatedText = '';
-  if (parsedMapping) {
-    methodName.split('.').forEach((methodName) => {
-      translatedText += getTranslated(methodName, className, parsedMapping);
-    });
-  }
-
-  // 기존 변환 결과 제거 또는 업데이트
-  let translationSpan = contextDiv.querySelector('.stack-translation');
-  if (!translationSpan) {
-    translationSpan = document.createElement('span');
-    translationSpan.className = 'stack-translation';
-    contextDiv.appendChild(document.createElement('br'));
-    contextDiv.appendChild(translationSpan);
-  } else {
-  }
-
-  // 내용 업데이트 (덮어쓰기)
-  translationSpan.textContent = `Translated => ${translatedText}`;
-  if (translationSpan) {
-    translationSpan.innerHTML = translationSpan.textContent
-      .replaceAll(/</g, '&lt;')
-      .replaceAll(/>/g, '&gt;')
-      .replaceAll(/\n/g, '<br>');
-  }
-
-}
-
 // 옵저버 시작
 function startObserving() {
   observer.observe(document.body, {
     childList: true,
     subtree: true,
   });
-}
-
-// 초기 요소 처리
-async function initElementProcessing() {
-  // AJAX 완료까지 대기
-  await waitForAjaxComplete();
-
-  // URL 변경 시 실행할 코드
-  let data = await fetchMappingData();
-
-  let json = partialDecode(data);
-
-  await transformElements(json);
 }
 
 
@@ -442,7 +450,7 @@ function getTranslated(methodName, className, parsedMapping) {
       }
     }
     if (translatedText == '') {
-      translatedText = 'Not Found';
+      translatedText = '';
     }
     return translatedText;
   }

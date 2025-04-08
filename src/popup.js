@@ -1,6 +1,6 @@
 'use strict';
 
-import './styles.css';
+import './style.css';
 
 const pako = require('pako');
 
@@ -728,13 +728,14 @@ function checkForCrashlyticsStack() {
             }
           }
 
+          let div = frame.querySelector('.context-cell');
           // 기존 변환 결과 제거 또는 업데이트
-          let translationSpan = contextDiv.querySelector('.stack-translation');
+          let translationSpan = div.querySelector('.translated-message');
           if (!translationSpan) {
-            translationSpan = document.createElement('span');
-            translationSpan.className = 'stack-translation';
-            contextDiv.appendChild(document.createElement('br'));
-            contextDiv.appendChild(translationSpan);
+            translationSpan = document.createElement('div');
+            translationSpan.className = 'translated-message';
+            div.appendChild(document.createElement('br'));
+            div.appendChild(translationSpan);
           } else {
           }
 
