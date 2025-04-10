@@ -1,6 +1,6 @@
 'use strict';
 
-import './style.css';
+import './popup.css';
 
 const pako = require('pako');
 // chrome.storage.local.get을 Promise로 래핑
@@ -45,15 +45,12 @@ function setStorageData(json) {
 document.addEventListener('DOMContentLoaded', async () => {
   const dropZone = document.getElementById('drop-zone');
   const fileUpload = document.getElementById('file-upload');
-  const fileNameElement = document.getElementById('file-name');
-  // const fileContent = document.getElementById('file-content');
   const fileInfo = document.getElementById('file-info');
-  const fileContainer = document.getElementById('file-input-container');
   const clearBtn = document.getElementById('clear-btn');
+  const refreshBtn = document.getElementById('refresh-btn');
 
   const activeAppCheckbox = document.getElementById('activeApp');
 
-// 이벤트 리스너 추가
   activeAppCheckbox.addEventListener('change', async function() {
     // 체크박스의 상태가 변경될 때 실행되는 코드
     if (activeAppCheckbox.checked) {
@@ -68,11 +65,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   fileUpload.addEventListener('change', handleFileSelect);
 
-  // 드래그 앤 드롭 이벤트
   setupDragAndDrop();
 
-  // 내용 지우기 버튼
   clearBtn.addEventListener('click', clearFile);
+  refreshBtn.addEventListener('click', sendRefreshMessage);
 
   await init();
 
