@@ -361,6 +361,10 @@ async function processSummarizeElement(parsedMapping) {
         cell.querySelector('.title-wrapper > .copy-target').textContent
       );
 
+      methodName = methodName.replace(/\[.*?\]/g, "");
+      className = className.replace(/\[.*?\]/g, "");
+
+
       var translated = '';
       methodName.split('.').forEach((methodName) => {
         translated += getTranslated(methodName, className, parsedMapping);
@@ -634,7 +638,7 @@ function parseAndroidStack(text) {
   const lastParenIndex = text.lastIndexOf('(');
 
   // 1. className 추출: 마지막 ( ~ ) 사이 내용에서 + 앞부분
-  const className = extractClassName(text);
+  let className = extractClassName(text);
 
   // 2. methodName 추출
   let methodName = '';
@@ -647,6 +651,9 @@ function parseAndroidStack(text) {
     const lastDotIndex = text.lastIndexOf('.', lastParenIndex);
     methodName = text.slice(lastDotIndex + 1, lastParenIndex).trim();
   }
+
+  methodName = methodName.replace(/\[.*?\]/g, "");
+  className = className.replace(/\[.*?\]/g, "");
 
   return { methodName, className };
 }
@@ -667,6 +674,9 @@ function parseiOSStack(title, subtitle) {
     methodName += '.' + className.split('+')[1].trim();
     className = className.split('+')[0].trim();
   }
+
+  methodName = methodName.replace(/\[.*?\]/g, "");
+  className = className.replace(/\[.*?\]/g, "");
 
   return {
     methodName: methodName,
@@ -695,6 +705,7 @@ function getTranslated(methodName, className, parsedMapping) {
       break;
     }
   }
+
 
   if (exist == false) {
     for (const [key, value] of Object.entries(
@@ -786,7 +797,53 @@ function getTranslated(methodName, className, parsedMapping) {
     if (translatedText == '') {
       translatedText = '';
     }
+  }
+
+  if (translatedText == '') {
+    console.log("get translated ",className, methodName);
+    for (const [key, value] of Object.entries(
+      parsedMapping.MemberTyp_Mapping.Method.Mapping
+    )) {
+      if (value === className) {
+        translatedText += key + '\n';
+      }
+    }
+
+    for (const [key, value] of Object.entries(
+      parsedMapping.MemberTyp_Mapping.Event.Mapping
+    )) {
+      if (value === className) {
+        translatedText += key + '\n';
+      }
+    }
+
+    for (const [key, value] of Object.entries(
+      parsedMapping.MemberTyp_Mapping.Type.Mapping
+    )) {
+      if (value === className) {
+        translatedText += key + '\n';
+      }
+    }
+    for (const [key, value] of Object.entries(
+      parsedMapping.MemberTyp_Mapping.Field.Mapping
+    )) {
+      if (value === className) {
+        translatedText += key + '\n';
+      }
+    }
+
+    for (const [key, value] of Object.entries(
+      parsedMapping.MemberTyp_Mapping.Property.Mapping
+    )) {
+      if (value === className) {
+        translatedText += key + '\n';
+      }
+    }
+    if (translatedText == '') {
+      translatedText = '';
+    }
     return translatedText;
   }
+
   return translatedText;
 }
