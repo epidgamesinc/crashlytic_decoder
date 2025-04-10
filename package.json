@@ -6,10 +6,12 @@
   "scripts": {
     "watch": "webpack --mode=development --watch --config config/webpack.config.js",
     "build": "webpack --mode=production --config config/webpack.config.js",
+    "postbuild": "node convertEncoding.js",
     "pack": "node pack.js",
     "repack": "npm run build && npm run pack",
     "format": "prettier --write --ignore-unknown \"{config,public,src}/**/*.{html,css,js,ts,json}\""
   },
+
   "devDependencies": {
     "adm-zip": "^0.5.16",
     "copy-webpack-plugin": "^10.2.4",
@@ -22,6 +24,7 @@
     "webpack-merge": "^5.10.0"
   },
   "dependencies": {
+    "iconv-lite": "^0.6.3",
     "pako": "^2.1.0"
   }
 }
