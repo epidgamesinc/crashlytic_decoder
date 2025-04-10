@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>크래시리틱 해독기</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="popup.css" />
     <style>
 
       label {
@@ -158,14 +158,18 @@
       <div class="loading-spinner"></div>
     </div>
 
-      <label>
-        <input id="activeApp" role="switch" type="checkbox" checked/>
+    <!-- 상단 바 -->
+    <div class="top-bar">
+      <label class="switch-label">
+        <input id="activeApp" role="switch" type="checkbox" checked />
         <span>활성화</span>
       </label>
+      <button id="refresh-btn" class="refresh-btn">Refresh</button>
+    </div>
+
 
     <div class="container">
       <h1>크래시리틱 해독기</h1>
-
 
 
       <div id="file-info" class="file-info">
