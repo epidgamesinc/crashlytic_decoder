@@ -399,26 +399,57 @@ async function processIOSElement(parsedMapping) {
   const cells = document.querySelectorAll(
     '.stack-frame.native-frame.developer-code.ng-star-inserted'
   );
-  // 각 요소에 스타일 적용
-  cells.forEach((cell) => {
-    const symbolDiv = cell.querySelector('.frame-symbol');
-    const fileLine = cell.querySelector('.frame-file-line span');
 
-    let { className, methodName } = parseiOSStack(
-      fileLine?.textContent.trim(),
-      symbolDiv?.textContent.trim()
+  if(cells.length > 0){
+    // 각 요소에 스타일 적용
+    cells.forEach((cell) => {
+      const symbolDiv = cell.querySelector('.frame-symbol');
+      const fileLine = cell.querySelector('.frame-file-line span');
+
+      let { className, methodName } = parseiOSStack(
+        fileLine?.textContent.trim(),
+        symbolDiv?.textContent.trim()
+      );
+
+      console.log(className, methodName);
+      var translated = '';
+      methodName.split('.').forEach((methodName) => {
+        translated += getTranslated(methodName, className, parsedMapping);
+
+        console.log(translated);
+      });
+
+      addTranslatedMessage(symbolDiv, translated);
+    });
+  }
+  else {
+    let anotherCells = document.querySelectorAll(
+      '.stack-frame.native-frame.ng-star-inserted'
     );
 
-    console.log(className, methodName);
-    var translated = '';
-    methodName.split('.').forEach((methodName) => {
-      translated += getTranslated(methodName, className, parsedMapping);
+    anotherCells.forEach((cell) =>{
+      const title = cell.querySelector('.frame-symbol');
 
-      console.log(translated);
+      if(title != null){
+        var className = extractClassNameFromTitle(title.textContent.trim());
+        var methodName = extractMethodName(
+          title.textContent.trim(),
+          title.textContent.trim().split('.').length >= 1 ? title.textContent.trim().split('.')[1] : ''
+        );
+
+        methodName = methodName.replace(/\[.*?\]/g, "");
+        className = className.replace(/\[.*?\]/g, "");
+
+
+        var translated = '';
+        methodName.split('.').forEach((methodName) => {
+          translated += getTranslated(methodName, className, parsedMapping);
+        });
+
+        addTranslatedMessage(cell.querySelector('.frame-symbol'), translated);
+      }
     });
-
-    addTranslatedMessage(symbolDiv, translated);
-  });
+  }
 }
 
 function waitForAjaxComplete() {
@@ -597,11 +628,17 @@ function extractMethodName(fullClassName, methodName) {
 }
 
 function extractClassNameFromTitle(str) {
+  var result = str;
+
   if (str.includes('+')) {
-    return str.split('+')[0];
+    result = str.split('+')[0];
   }
 
-  return str;
+  if(result.includes('.')){
+    result = result.split('.')[0];
+  }
+
+  return result;
 }
 
 function addTranslatedMessage(wrappers, msg) {
@@ -614,7 +651,9 @@ function addTranslatedMessage(wrappers, msg) {
   // 새로운 translated-message 생성
   const translatedDiv = document.createElement('div');
   translatedDiv.className = 'translated-message';
-  translatedDiv.innerHTML = '<strong>Translated => ' + msg + '</strong>';
+  translatedDiv.innerHTML = '<strong>Translated => ' + msg.replaceAll(/</g, '&lt;')
+    .replaceAll(/>/g, '&gt;')
+    .replaceAll(/\n/g, '<br>') + '</strong>';
   translatedDiv.style.marginTop = '5px';
   translatedDiv.style.fontWeight = 'bold';
 
@@ -623,6 +662,9 @@ function addTranslatedMessage(wrappers, msg) {
 }
 
 function extractAfterPlusOrDot(str) {
+  if(str == null){
+    return '';
+  }
   // '+'가 있으면 '+' 이후의 문자열을 반환
   if (str.includes('+')) {
     return str.split('+')[1];
@@ -663,7 +705,13 @@ function extractClassName(text) {
   const betweenParen = text
     .slice(text.lastIndexOf('(') + 1, text.lastIndexOf(')'))
     .trim();
-  return betweenParen.split('+')[0]; // +가 없으면 전체 반환
+
+  let className = betweenParen.split('+')[0];
+
+  if(className.includes('.')){
+    className = className.split('.')[0];
+  }
+  return className; // +가 없으면 전체 반환
 }
 
 function parseiOSStack(title, subtitle) {
@@ -677,6 +725,10 @@ function parseiOSStack(title, subtitle) {
 
   methodName = methodName.replace(/\[.*?\]/g, "");
   className = className.replace(/\[.*?\]/g, "");
+
+  if(className.includes('.')){
+    className = className.split('.')[0];
+  }
 
   return {
     methodName: methodName,
@@ -693,6 +745,8 @@ function startObserving() {
 }
 
 function getTranslated(methodName, className, parsedMapping) {
+  console.log("get translated ",className, methodName);
+
   var exist = false;
   var translatedText = '';
 
@@ -700,6 +754,7 @@ function getTranslated(methodName, className, parsedMapping) {
     parsedMapping.MemberTyp_Mapping.Method.Mapping
   )) {
     if (value === methodName && key.includes(className)) {
+      console.log("@@@@ ", key);
       translatedText += key + '\n';
       exist = true;
       break;
@@ -712,6 +767,8 @@ function getTranslated(methodName, className, parsedMapping) {
       parsedMapping.MemberTyp_Mapping.Event.Mapping
     )) {
       if (value === methodName && key.includes(className)) {
+        console.log("@@@@ 1", key);
+
         translatedText += key + '\n';
         exist = true;
         break;
@@ -724,6 +781,8 @@ function getTranslated(methodName, className, parsedMapping) {
       parsedMapping.MemberTyp_Mapping.Type.Mapping
     )) {
       if (value === methodName && key.includes(className)) {
+        console.log("@@@@ 2", key);
+
         translatedText += key + '\n';
         exist = true;
         break;
@@ -736,6 +795,8 @@ function getTranslated(methodName, className, parsedMapping) {
       parsedMapping.MemberTyp_Mapping.Field.Mapping
     )) {
       if (value === methodName && key.includes(className)) {
+        console.log("@@@@ 3", key);
+
         translatedText += key + '\n';
         exist = true;
         break;
@@ -748,6 +809,8 @@ function getTranslated(methodName, className, parsedMapping) {
       parsedMapping.MemberTyp_Mapping.Property.Mapping
     )) {
       if (value === methodName && key.includes(className)) {
+        console.log("@@@@ 4", key);
+
         translatedText += key + '\n';
         exist = true;
         break;
@@ -760,6 +823,8 @@ function getTranslated(methodName, className, parsedMapping) {
       parsedMapping.MemberTyp_Mapping.Method.Mapping
     )) {
       if (value === methodName) {
+        console.log("@@@@ 5", key, value, methodName, className);
+
         translatedText += key + '\n';
       }
     }
@@ -768,6 +833,8 @@ function getTranslated(methodName, className, parsedMapping) {
       parsedMapping.MemberTyp_Mapping.Event.Mapping
     )) {
       if (value === methodName) {
+        console.log("@@@@ 6", key);
+
         translatedText += key + '\n';
       }
     }
@@ -776,6 +843,8 @@ function getTranslated(methodName, className, parsedMapping) {
       parsedMapping.MemberTyp_Mapping.Type.Mapping
     )) {
       if (value === methodName) {
+        console.log("@@@@ 7", key);
+
         translatedText += key + '\n';
       }
     }
@@ -783,6 +852,8 @@ function getTranslated(methodName, className, parsedMapping) {
       parsedMapping.MemberTyp_Mapping.Field.Mapping
     )) {
       if (value === methodName) {
+        console.log("@@@@ 8", key);
+
         translatedText += key + '\n';
       }
     }
@@ -800,7 +871,6 @@ function getTranslated(methodName, className, parsedMapping) {
   }
 
   if (translatedText == '') {
-    console.log("get translated ",className, methodName);
     for (const [key, value] of Object.entries(
       parsedMapping.MemberTyp_Mapping.Method.Mapping
     )) {
